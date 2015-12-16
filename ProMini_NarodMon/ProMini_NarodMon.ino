@@ -6,8 +6,20 @@
 #include <RF24.h> // https://github.com/maniacbug/RF24
 #include <SoftwareSerial.h>
 #include <ArduinoJson.h>
+#include <dht.h>
+#include <Wire.h>
+#include <BMP085.h>
 
 #define STS_LED_PIN 7 
+
+#define DHT_COUNTER_TIMEOUT 6000
+#define SEND_COUNTER_TIMEOUT 60000
+
+dht DHT;
+
+BMP085 bmp;  
+
+#define DHT11_PIN 8
 
 const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор передачи, "труба"
 
@@ -46,6 +58,11 @@ int NARODMON_STATUS = 0;
 int  stsLed = 0;
 int stsLedCounter = 0;
 
+// счётчик для DHT и BMP
+long dhtCounter = 0;
+// счётчик отправки на народмон
+long sendCounter = 0;
+
 char jsonIn[100];
 
 static byte data[8];
@@ -62,9 +79,89 @@ union
   unsigned char lBuf[4];
 } lng;
 
+
+void ReadDHT()
+{
+    // READ DATA
+  
+    int chk = DHT.read11(DHT11_PIN);
+//    switch (chk)
+//    {
+//      case DHTLIB_OK:
+//       DH = 0;
+//      break;
+//      case DHTLIB_ERROR_CONNECT:
+//       DH = 1;
+//      break;
+//      case DHTLIB_ERROR_TIMEOUT:
+//       DH = 2;
+//      break;  
+//      case DHTLIB_ERROR_CHECKSUM:
+//       DH = 3;
+//      break;
+//      case DHTLIB_ERROR_ACK_L:
+//       DH = 4;
+//      break;
+//      case DHTLIB_ERROR_ACK_H:
+//       DH = 5;
+//      break;
+//      default:
+//       DH = 6;
+//      break;
+//    }
+    if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 10) & (DHT.temperature < 90))
+  {
+      HUM = DHT.humidity;
+      TEMP_IN = DHT.temperature;
+
+      // debug
+      softSerial.print("HUM: ");
+      softSerial.println(HUM);
+      softSerial.print("TEMP_IN: ");
+      softSerial.println(TEMP_IN);
+  }
+
+}
+
+void ReadBMP()
+{
+  long pres = bmp.readPressure();
+  float tmp = bmp.readTemperature();
+
+  PRESS = (double) pres / 1000.0
+  TEMP_E = tmp;
+
+  softSerial.print("PRESS: ");
+  softSerial.println(PRESS);
+
+  softSerial.print("TEMP_E: ");
+  softSerial.println(TEMP_E);
+}
+
 void SendDataToESP()
 {
-  
+   //
+// Step 1: Reserve memory space
+//
+StaticJsonBuffer<200> jsonBuffer;
+
+//
+// Step 2: Build object tree in memory
+//
+JsonObject& root = jsonBuffer.createObject();
+root["temp_out"] = TEMP_OUT;
+root["bat"] = BAT;
+root["temp_in"] = TEMP_IN;
+root["hum"] = HUM;
+root["press"] = PRESS;
+root["temp_e"] = TEMP_E;
+//
+// Step 3: Generate the JSON string
+//
+root.printTo(Serial);
+
+// debug
+root.prinTo(softSerial);
 }
 
 void setup() 
@@ -86,6 +183,9 @@ void setup()
 
   radio.openReadingPipe(1, pipe); // открываем первую трубу с индитификатором "pipe"
   radio.startListening(); // включаем приемник, начинаем слушать трубу
+
+ // Wire.begin();
+  bmp.begin();
 }
 
 void loop() 
@@ -104,16 +204,20 @@ void loop()
        jsonCnt = 0;
        sw = false;
        jsonIn[jsonCnt] = (char) incommingByte;
+       jsonCnt++;
        break;  
      case '}':  //Проверяем признак конца команды
         sw = true;
-        jsonCnt++;
         jsonIn[jsonCnt] = (char) incommingByte;
+        jsonCnt++;
         break;
      default:
        sw = false;
-       jsonCnt++;
-       jsonIn[jsonCnt] = (char) incommingByte;
+       if (jsonCnt > 0)
+       {
+          jsonIn[jsonCnt] = (char) incommingByte;
+          jsonCnt++;
+       }
        
        // если данных пришло больше, чем размер буфера, то всё очищаем
        if (jsonCnt > sizeof(jsonIn))
@@ -128,8 +232,8 @@ void loop()
   // анализируем входящие данные JSON
   if (sw)
   {
-      Serial.print("json: ");
-      Serial.print(jsonIn);
+      softSerial.print("jsonIn: ");
+      softSerial.print(jsonIn);
 
       StaticJsonBuffer<200> jsonBuffer;
       JsonObject& root = jsonBuffer.parseObject(jsonIn);
@@ -199,6 +303,61 @@ void loop()
         digitalWrite(STS_LED_PIN, 1); 
       }
     break;      
+  }
+
+
+  // Считываем NRF
+  if (radio.available())
+{
+  // читаем данные и указываем сколько байт читать
+  radio.read(&data, sizeof(data));
+
+  pos = 0;
+  for (byte i = 0; i < 4; i++)
+  {
+     tmp.buf[i] = data[pos]; 
+     pos++;
+  }
+  
+  softSerial.print("Data Recieve: ");
+  softSerial.print(tmp.f);
+  softSerial.print(" oC");
+
+  TEMP_OUT = tmp.f;
+
+  // получаем значение напряжения
+  pos = 4;
+  for (byte i = 0; i < 4; i++)
+  {
+     lng.lBuf[i] = data[pos]; 
+     pos++;
+  }
+  
+  softSerial.print(" [VCC: ");
+  softSerial.print(lng.l);
+  softSerial.println("mV]");
+
+  BAT = lng.l;
+}
+
+ // считываем DHT
+ // чтение датчиков
+ dhtCounter++;
+  if (dhtCounter > DHT_COUNTER_TIMEOUT)
+  {
+    dhtCounter = 0;
+    ReadDHT();
+    ReadBMP();
+    
+    //debug!!!!!
+   // SendDataToESP();
+  }
+
+  sendCounter++;
+  if (sendCounter > SEND_COUNTER_TIMEOUT)
+  {
+    sendCounter = 0;
+    SendDataToESP();
   }
   
   delay(10);   

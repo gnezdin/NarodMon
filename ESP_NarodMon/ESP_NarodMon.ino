@@ -33,7 +33,31 @@ double PRESS = 0;
 // Температура электроники (BMP180) 
 double TEMP_E = 0;
 
+// переменные от ESP8266
+int WIFI_STATUS = 0;
+int NARODMON_STATUS = 0;
+
 char jsonIn[100];
+
+void SendDataToArduino()
+{
+  //
+  // Step 1: Reserve memory space
+  //
+  StaticJsonBuffer<100> jsonBuffer;
+
+  //
+  // Step 2: Build object tree in memory
+  //
+  JsonObject& js = jsonBuffer.createObject();
+  js["wifi_status"] = WIFI_STATUS;
+  js["narodmon_status"] = NARODMON_STATUS;
+
+//
+// Step 3: Generate the JSON string
+//
+js.printTo(Serial);
+}
 
 void SendDataToNarodMon()
 {
@@ -56,17 +80,20 @@ void SendDataToNarodMon()
 if (WiFi.status() != WL_CONNECTED) 
 {
     WiFi.disconnect();
+    WIFI_STATUS = 0;
+    SendDataToArduino();
     ConnectToWiFi();
-
+}
     //  // подключаемся к серверу 
   Serial.print("connecting to ");
   Serial.println(host);
   
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
-  
+  NARODMON_STATUS = 0;
   if (!client.connect(host, httpPort)) 
   {
+    SendDataToArduino();
     Serial.println("connection failed");
     return;
   }
@@ -145,19 +172,25 @@ if (WiFi.status() != WL_CONNECTED)
   {
     String line = client.readStringUntil('\r');
     Serial.print(line); // хотя это можно убрать
+    if (line.IndexOf("OK") >= 0)
+    {
+      NARODMON.STATUS = 1;
+    }
   }
   
   client.stop();
   Serial.println();
   Serial.println();
   Serial.println("Closing connection");
-}
+
+  SendDataToArduino();
 
 }
 
 void ConnectToWiFi()
 {
     // Подключаемся к wifi
+    WIFI_STATUS = 0;
   Serial.println();
   Serial.println();
   Serial.print("Connecting to ");
@@ -178,6 +211,9 @@ void ConnectToWiFi()
   Serial.print("MAC address: ");
   Serial.println(WiFi.macAddress());
   Serial.println();
+
+  WIFI_STATUS = 1;
+  SendDataToArduino();
 }
 
 
@@ -186,6 +222,7 @@ void setup()
   memset(jsonIn, 0, sizeof(jsonIn));
   Serial.begin(9600);
   delay(10);
+  SendDataToArduino();
   ConnectToWiFi();
 }
 
@@ -205,16 +242,20 @@ void loop()
        jsonCnt = 0;
        sw = false;
        jsonIn[jsonCnt] = (char) incommingByte;
+       jsonCnt++;
        break;  
      case '}':  //Проверяем признак конца команды
         sw = true;
-        jsonCnt++;
         jsonIn[jsonCnt] = (char) incommingByte;
+        jsonCnt++;
         break;
      default:
        sw = false;
-       jsonCnt++;
-       jsonIn[jsonCnt] = (char) incommingByte;
+       if (jsonCnt > 0)
+       {
+          jsonIn[jsonCnt] = (char) incommingByte;
+          jsonCnt++;
+       }
        
        // если данных пришло больше, чем размер буфера, то всё очищаем
        if (jsonCnt > sizeof(jsonIn))
