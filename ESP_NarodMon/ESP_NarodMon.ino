@@ -6,6 +6,7 @@
 
 const char* ssid     = "WdLink"; // название и пароль точки доступа
 const char* password = "aeroglass";
+const char* deviceMac = "1A:FE:34:FC:B3:44";
 
 const char* host = "narodmon.ru";
 const int httpPort = 8283;
@@ -37,19 +38,146 @@ char jsonIn[100];
 void SendDataToNarodMon()
 {
    // debug
-   Serial.println("SendData ...");
-   Serial.print("TEMP_OUT: ");
-   Serial.println(TEMP_OUT);
-   Serial.print("BAT: ");
-   Serial.println(BAT);
-   Serial.print("TEMP_IN: ");
-   Serial.println(TEMP_IN);
-   Serial.print("HUM: ");
-   Serial.println(HUM);
-   Serial.print("PRESS: ");
-   Serial.println(PRESS);
-   Serial.print("TEMP_E: ");
-   Serial.println(TEMP_E);
+//   Serial.println("SendData ...");
+//   Serial.print("TEMP_OUT: ");
+//   Serial.println(TEMP_OUT);
+//   Serial.print("BAT: ");
+//   Serial.println(BAT);
+//   Serial.print("TEMP_IN: ");
+//   Serial.println(TEMP_IN);
+//   Serial.print("HUM: ");
+//   Serial.println(HUM);
+//   Serial.print("PRESS: ");
+//   Serial.println(PRESS);
+//   Serial.print("TEMP_E: ");
+//   Serial.println(TEMP_E);
+
+// проверяем подключен ли WiFi и переподключаемся, если что
+if (WiFi.status() != WL_CONNECTED) 
+{
+    WiFi.disconnect();
+    ConnectToWiFi();
+
+    //  // подключаемся к серверу 
+  Serial.print("connecting to ");
+  Serial.println(host);
+  
+  // Use WiFiClient class to create TCP connections
+  WiFiClient client;
+  
+  if (!client.connect(host, httpPort)) 
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  
+  // отправляем данные  
+  Serial.println("Sending..."); 
+      // заголовок
+  client.print("#");
+  client.print(deviceMac); // отправляем МАС нашей ESP8266
+  client.print("#");
+  client.print("Novopolotsk_station"); // название устройства
+//  client.print("#55.53582#28.65198"); // координаты местонахождения датчика
+  client.println();
+  
+  // отправляем данные с первого датчика
+  client.print("#"); 
+  client.print("TEMP_OUT");
+  client.print("#");
+  client.print(TEMP_OUT);
+  // название датчика
+  client.print("#Окружающая температура");  
+  client.println();
+
+  // отправляем данные с 2 датчика
+  client.print("#"); 
+  client.print("BAT");
+  client.print("#");
+  client.print(BAT);
+  // название датчика
+  client.print("#Напряжение батарей");  
+  client.println();
+
+  // отправляем данные с 3 датчика
+  client.print("#"); 
+  client.print("TEMP_IN");
+  client.print("#");
+  client.print(TEMP_IN);
+  // название датчика
+  client.print("#Температура внутри помещения");  
+  client.println();
+
+   // отправляем данные с 4 датчика
+  client.print("#"); 
+  client.print("HUM");
+  client.print("#");
+  client.print(HUM);
+  // название датчика
+  client.print("#Отн. влажность внутри помещения");  
+  client.println();
+
+   // отправляем данные с 5 датчика
+  client.print("#"); 
+  client.print("PRESS");
+  client.print("#");
+  client.print(PRESS);
+  // название датчика
+  client.print("#Атмосферное давление");  
+  client.println();
+
+   // отправляем данные с 6 датчика
+  client.print("#"); 
+  client.print("TEMP_E");
+  client.print("#");
+  client.print(TEMP_E);
+  // название датчика
+  client.print("#Температура электроники");  
+  client.println();
+ 
+   client.print("##");
+    
+  delay(10);
+
+  // читаем ответ с и отправляем его в сериал
+  Serial.print("Requesting: ");  
+  while(client.available())
+  {
+    String line = client.readStringUntil('\r');
+    Serial.print(line); // хотя это можно убрать
+  }
+  
+  client.stop();
+  Serial.println();
+  Serial.println();
+  Serial.println("Closing connection");
+}
+
+}
+
+void ConnectToWiFi()
+{
+    // Подключаемся к wifi
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected");  
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("MAC address: ");
+  Serial.println(WiFi.macAddress());
+  Serial.println();
 }
 
 
@@ -58,7 +186,7 @@ void setup()
   memset(jsonIn, 0, sizeof(jsonIn));
   Serial.begin(9600);
   delay(10);
-
+  ConnectToWiFi();
 }
 
 void loop() 
@@ -161,79 +289,7 @@ void loop()
 
        // отправляем данные в интернет
        SendDataToNarodMon();
-  }
-  
-  
-   
-     // Подключаемся к wifi
-//  Serial.println();
-//  Serial.println();
-//  Serial.print("Connecting to ");
-//  Serial.println(ssid);
-//  
-//  WiFi.begin(ssid, password);
-//  
-//  while (WiFi.status() != WL_CONNECTED) {
-//    delay(500);
-//    Serial.print(".");
-//  }
-//
-//  Serial.println();
-//  Serial.println("WiFi connected");  
-//  Serial.print("IP address: ");
-//  Serial.println(WiFi.localIP());
-//  Serial.print("MAC address: ");
-//  Serial.println(WiFi.macAddress());
-//  Serial.println();
-//  
-//  // подключаемся к серверу 
-//  Serial.print("connecting to ");
-//  Serial.println(host);
-//  
-//  // Use WiFiClient class to create TCP connections
-//  WiFiClient client;
-//  
-//  if (!client.connect(host, httpPort)) {
-//    Serial.println("connection failed");
-//    return;
-//  }
-//  
-//  // отправляем данные  
-//  Serial.println("Sending..."); 
-//      // заголовок
-//  client.print("#");
-//  client.print(WiFi.macAddress()); // отправляем МАС нашей ESP8266
-//  client.print("#");
-//  client.print("ESP8266"); // название устройства
-////  client.print("#45.031660#39.004750"); // координаты местонахождения датчика
-//  client.println();
-//  
-//      // отправляем данные с градусника
-//    client.print("#"); 
-//    for(int i = 0; i < 8; i++) client.print(addr[i], HEX); // номер 18b20 
-//    client.print("#");
-//    client.print(temperature);
-//    client.print("#temp");  // название датчика
-// 
-//   client.println("##");
-//    
-//  delay(10);
-//
-//  // читаем ответ с и отправляем его в сериал
-//  Serial.print("Requesting: ");  
-//  while(client.available()){
-//    String line = client.readStringUntil('\r');
-//    Serial.print(line); // хотя это можно убрать
-//  }
-//  
-//  client.stop();
-//  Serial.println();
-//  Serial.println();
-//  Serial.println("Closing connection");
-//
-//  WiFi.disconnect(); // отключаемся от сети
-//  Serial.println("Disconnect WiFi.");
-  
+  }  
   delay(10);
 }
 
