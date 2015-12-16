@@ -59,6 +59,35 @@ void SendDataToArduino()
 js.printTo(Serial);
 }
 
+void ConnectToWiFi()
+{
+    // Подключаемся к wifi
+    WIFI_STATUS = 0;
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected");  
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("MAC address: ");
+  Serial.println(WiFi.macAddress());
+  Serial.println();
+
+  WIFI_STATUS = 1;
+  SendDataToArduino();
+}
+
 void SendDataToNarodMon()
 {
    // debug
@@ -172,9 +201,9 @@ if (WiFi.status() != WL_CONNECTED)
   {
     String line = client.readStringUntil('\r');
     Serial.print(line); // хотя это можно убрать
-    if (line.IndexOf("OK") >= 0)
+    if (line.indexOf("OK") >= 0)
     {
-      NARODMON.STATUS = 1;
+      NARODMON_STATUS = 1;
     }
   }
   
@@ -187,34 +216,7 @@ if (WiFi.status() != WL_CONNECTED)
 
 }
 
-void ConnectToWiFi()
-{
-    // Подключаемся к wifi
-    WIFI_STATUS = 0;
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  
-  WiFi.begin(ssid, password);
-  
-  while (WiFi.status() != WL_CONNECTED) 
-  {
-    delay(500);
-    Serial.print(".");
-  }
 
-  Serial.println();
-  Serial.println("WiFi connected");  
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("MAC address: ");
-  Serial.println(WiFi.macAddress());
-  Serial.println();
-
-  WIFI_STATUS = 1;
-  SendDataToArduino();
-}
 
 
 void setup() 

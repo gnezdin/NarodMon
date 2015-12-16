@@ -17,7 +17,7 @@
 
 dht DHT;
 
-BMP085 bmp;  
+BMP085 dps = BMP085();
 
 #define DHT11_PIN 8
 
@@ -125,11 +125,14 @@ void ReadDHT()
 
 void ReadBMP()
 {
-  long pres = bmp.readPressure();
-  float tmp = bmp.readTemperature();
+  long pres = 0;
+  dps.getPressure(&pres);
+  
+  long tmp = 0;
+  dps.getTemperature(&tmp); 
 
-  PRESS = (double) pres / 1000.0
-  TEMP_E = tmp;
+  PRESS = (double) pres / 1000.0;
+  TEMP_E = tmp * 0.1;
 
   softSerial.print("PRESS: ");
   softSerial.println(PRESS);
@@ -161,7 +164,7 @@ root["temp_e"] = TEMP_E;
 root.printTo(Serial);
 
 // debug
-root.prinTo(softSerial);
+root.printTo(softSerial);
 }
 
 void setup() 
@@ -184,8 +187,10 @@ void setup()
   radio.openReadingPipe(1, pipe); // открываем первую трубу с индитификатором "pipe"
   radio.startListening(); // включаем приемник, начинаем слушать трубу
 
- // Wire.begin();
-  bmp.begin();
+  Wire.begin();
+  delay(1000);
+  
+  dps.init();   
 }
 
 void loop() 
@@ -268,7 +273,7 @@ void loop()
        {
           stsLed = 2;
        }
-       else if (!WIFI_STATUS))
+       else if (!WIFI_STATUS)
        {
           stsLed = 0;
        }
@@ -312,7 +317,7 @@ void loop()
   // читаем данные и указываем сколько байт читать
   radio.read(&data, sizeof(data));
 
-  pos = 0;
+  byte pos = 0;
   for (byte i = 0; i < 4; i++)
   {
      tmp.buf[i] = data[pos]; 
