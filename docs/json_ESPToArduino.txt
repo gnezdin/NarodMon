@@ -1,0 +1,1 @@
+{"wifi_status":"1", "narodmon_status":"1"}
