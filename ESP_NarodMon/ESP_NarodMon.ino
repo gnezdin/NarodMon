@@ -4,12 +4,19 @@
 #include <ESP8266WiFi.h>
 #include <ArduinoJson.h>
 
+// 1 c = 2
+#define WIFI_CONNECT_TIMEOUT 40
+
 const char* ssid     = "WdLink"; // название и пароль точки доступа
 const char* password = "aeroglass";
 const char* deviceMac = "1A:FE:34:FC:B3:44";
 
 const char* host = "narodmon.ru";
 const int httpPort = 8283;
+
+// replace with your channel's thingspeak API key, 
+String tsApiKey = "8XIYN39QEW35QO69"; 
+const char* tsServer = "api.thingspeak.com";
 
 // очередной принятый по UART байт
 byte incommingByte = 0;
@@ -35,9 +42,44 @@ double TEMP_E = 0;
 
 // переменные от ESP8266
 int WIFI_STATUS = 0;
-int NARODMON_STATUS = 0;
+int INTERNET_STATUS = 0;
 
 char jsonIn[100];
+
+
+void ConnectToWiFi()
+{
+    // Подключаемся к wifi
+    WIFI_STATUS = 0;
+    INTERNET_STATUS = 0;
+//  Serial.println();
+//  Serial.println();
+//  Serial.print("Connecting to ");
+//  Serial.println(ssid);
+  
+  WiFi.begin(ssid, password);
+  
+  int wifiCounter = 0;
+  while ((WiFi.status() != WL_CONNECTED) & (wifiCounter < WIFI_CONNECT_TIMEOUT)) 
+  {
+    wifiCounter++;
+    delay(500);
+   // Serial.print(".");
+  }
+
+//  Serial.println();
+//  Serial.println("WiFi connected");  
+//  Serial.print("IP address: ");
+//  Serial.println(WiFi.localIP());
+//  Serial.print("MAC address: ");
+//  Serial.println(WiFi.macAddress());
+//  Serial.println();
+  if (WiFi.status() ==  WL_CONNECTED)
+  {
+    WIFI_STATUS = 1;
+  }
+//  SendDataToArduino();
+}
 
 void SendDataToArduino()
 {
@@ -51,7 +93,7 @@ void SendDataToArduino()
   //
   JsonObject& js = jsonBuffer.createObject();
   js["wifi_status"] = WIFI_STATUS;
-  js["narodmon_status"] = NARODMON_STATUS;
+  js["internet_status"] = INTERNET_STATUS;
 
 //
 // Step 3: Generate the JSON string
@@ -59,36 +101,63 @@ void SendDataToArduino()
 js.printTo(Serial);
 }
 
-void ConnectToWiFi()
+
+bool SendDataToTS()
 {
-    // Подключаемся к wifi
-    WIFI_STATUS = 0;
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  
-  WiFi.begin(ssid, password);
-  
-  while (WiFi.status() != WL_CONNECTED) 
+  bool result = false;
+
+  // проверяем подключен ли WiFi и переподключаемся, если что
+  if (WiFi.status() != WL_CONNECTED) 
   {
-    delay(500);
-    Serial.print(".");
+      WiFi.disconnect();
+      ConnectToWiFi();
   }
 
-  Serial.println();
-  Serial.println("WiFi connected");  
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("MAC address: ");
-  Serial.println(WiFi.macAddress());
-  Serial.println();
+  if (WiFi.status() != WL_CONNECTED) 
+  {
+      return result;
+  }
 
-  WIFI_STATUS = 1;
-  SendDataToArduino();
+  // Use WiFiClient class to create TCP connections
+  WiFiClient client;
+  if (!client.connect(tsServer,80)) 
+  {
+    return result;
+  }
+
+  String postStr = tsApiKey;
+           postStr +="&field1=";
+           postStr += String(TEMP_OUT);
+           postStr +="&field2=";
+           postStr += String(BAT);
+           postStr +="&field3=";
+           postStr += String(TEMP_IN);
+           postStr +="&field4=";
+           postStr += String(HUM);
+           postStr +="&field5=";
+           postStr += String(PRESS);
+           postStr +="&field6=";
+           postStr += String(TEMP_E);
+           postStr += "\r\n\r\n";
+ 
+     client.print("POST /update HTTP/1.1\n"); 
+     client.print("Host: api.thingspeak.com\n"); 
+     client.print("Connection: close\n"); 
+     client.print("X-THINGSPEAKAPIKEY: "+tsApiKey+"\n"); 
+     client.print("Content-Type: application/x-www-form-urlencoded\n"); 
+     client.print("Content-Length: "); 
+     client.print(postStr.length()); 
+     client.print("\n\n"); 
+     client.print(postStr);
+    
+     client.stop();
+     
+     result = true;
+     return result;
 }
 
-void SendDataToNarodMon()
+bool SendDataToNarodMon()
+
 {
    // debug
 //   Serial.println("SendData ...");
@@ -105,30 +174,33 @@ void SendDataToNarodMon()
 //   Serial.print("TEMP_E: ");
 //   Serial.println(TEMP_E);
 
-// проверяем подключен ли WiFi и переподключаемся, если что
-if (WiFi.status() != WL_CONNECTED) 
-{
-    WiFi.disconnect();
-    WIFI_STATUS = 0;
-    SendDataToArduino();
-    ConnectToWiFi();
-}
+bool result = false;
+
+  // проверяем подключен ли WiFi и переподключаемся, если что
+  if (WiFi.status() != WL_CONNECTED) 
+  {
+      WiFi.disconnect();
+      ConnectToWiFi();
+  }
+
+  if (WiFi.status() != WL_CONNECTED) 
+  {
+      return result;
+  }
     //  // подключаемся к серверу 
-  Serial.print("connecting to ");
-  Serial.println(host);
+//  Serial.print("connecting to ");
+//  Serial.println(host);
   
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
-  NARODMON_STATUS = 0;
   if (!client.connect(host, httpPort)) 
-  {
-    SendDataToArduino();
-    Serial.println("connection failed");
-    return;
+  {   
+     //Serial.println("connection failed");
+     return result;
   }
   
   // отправляем данные  
-  Serial.println("Sending..."); 
+  //Serial.println("Sending..."); 
       // заголовок
   client.print("#");
   client.print(deviceMac); // отправляем МАС нашей ESP8266
@@ -193,29 +265,24 @@ if (WiFi.status() != WL_CONNECTED)
  
    client.print("##");
     
-  delay(10);
-
-  // читаем ответ с и отправляем его в сериал
-  Serial.print("Requesting: ");  
-  while(client.available())
-  {
-    String line = client.readStringUntil('\r');
-    Serial.print(line); // хотя это можно убрать
-    if (line.indexOf("OK") >= 0)
-    {
-      NARODMON_STATUS = 1;
-    }
-  }
+ // Serial.print("Requesting: ");  
+//  while(client.available())
+//  {
+//    String line = client.readStringUntil('\r');
+//    Serial.print(line); // хотя это можно убрать
+//    if (line.IndexOf("OK") >= 0)
+//    {
+//      NARODMON.STATUS = 1;
+//    }
+//  }
   
   client.stop();
-  Serial.println();
-  Serial.println();
-  Serial.println("Closing connection");
+ 
+ // Serial.println("Closing connection");
 
-  SendDataToArduino();
-
+  result = true;
+  return result;
 }
-
 
 
 
@@ -223,9 +290,9 @@ void setup()
 {
   memset(jsonIn, 0, sizeof(jsonIn));
   Serial.begin(9600);
-  delay(10);
-  SendDataToArduino();
+  
   ConnectToWiFi();
+  SendDataToArduino();
 }
 
 void loop() 
@@ -331,7 +398,17 @@ void loop()
       jsonCnt = 0;    
 
        // отправляем данные в интернет
-       SendDataToNarodMon();
+      // SendDataToNarodMon();
+      INTERNET_STATUS = 0;
+      if (SendDataToTS())
+      {
+         INTERNET_STATUS = 1;  
+      }
+        else
+        {
+          INTERNET_STATUS = 0;
+        }
+      SendDataToArduino();
   }  
   delay(10);
 }

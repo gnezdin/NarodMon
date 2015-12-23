@@ -17,7 +17,9 @@
 
 dht DHT;
 
-BMP085 dps = BMP085();
+
+BMP085 bmp = BMP085();  
+
 
 #define DHT11_PIN 8
 
@@ -52,7 +54,7 @@ double TEMP_E = 0;
 
 // переменные от ESP8266
 int WIFI_STATUS = 0;
-int NARODMON_STATUS = 0;
+int INTERNET_STATUS = 0;
 
 // переменная для светодиода 0-выкл, 1-вкл, 2-мигание
 int  stsLed = 0;
@@ -84,7 +86,7 @@ void ReadDHT()
 {
     // READ DATA
   
-    int chk = DHT.read11(DHT11_PIN);
+    int chk = DHT.read21(DHT11_PIN);
 //    switch (chk)
 //    {
 //      case DHTLIB_OK:
@@ -125,14 +127,16 @@ void ReadDHT()
 
 void ReadBMP()
 {
-  long pres = 0;
-  dps.getPressure(&pres);
-  
-  long tmp = 0;
-  dps.getTemperature(&tmp); 
+
+  long pres = 0; //bmp.readPressure();
+  bmp.getPressure(&pres);
+  long temp = 0;
+  bmp.getTemperature(&temp);
+  float tmp = temp;
 
   PRESS = (double) pres / 1000.0;
-  TEMP_E = tmp * 0.1;
+  TEMP_E = tmp;
+
 
   softSerial.print("PRESS: ");
   softSerial.println(PRESS);
@@ -187,10 +191,11 @@ void setup()
   radio.openReadingPipe(1, pipe); // открываем первую трубу с индитификатором "pipe"
   radio.startListening(); // включаем приемник, начинаем слушать трубу
 
-  Wire.begin();
-  delay(1000);
-  
-  dps.init();   
+
+ // Wire.begin();
+ // bmp.begin();
+  bmp.init();   
+>>>>>>> 4793fb56699d8844c16a7629041ea25acb19f118
 }
 
 void loop() 
@@ -254,9 +259,9 @@ void loop()
          WIFI_STATUS = root["wifi_status"];
       }
 
-       if (root.containsKey("narodmon_status"))
+       if (root.containsKey("internet_status"))
       {
-         NARODMON_STATUS = root["narodmon_status"];
+         INTERNET_STATUS = root["internet_status"];
       }
       
       // очищаем входной буфер
@@ -265,11 +270,11 @@ void loop()
       jsonCnt = 0;    
 
       // отображаем статус на LED
-      if ((WIFI_STATUS) & (NARODMON_STATUS))
+      if ((WIFI_STATUS) & (INTERNET_STATUS))
       {
         stsLed = 1;
       }
-       else if ((WIFI_STATUS) & (!NARODMON_STATUS))
+       else if ((WIFI_STATUS) & (!INTERNET_STATUS))
        {
           stsLed = 2;
        }
@@ -317,7 +322,9 @@ void loop()
   // читаем данные и указываем сколько байт читать
   radio.read(&data, sizeof(data));
 
-  byte pos = 0;
+
+  byte  pos = 0;
+
   for (byte i = 0; i < 4; i++)
   {
      tmp.buf[i] = data[pos]; 
