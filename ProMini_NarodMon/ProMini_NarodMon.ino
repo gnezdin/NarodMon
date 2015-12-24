@@ -195,7 +195,6 @@ void setup()
  // Wire.begin();
  // bmp.begin();
   bmp.init();   
->>>>>>> 4793fb56699d8844c16a7629041ea25acb19f118
 }
 
 void loop() 
