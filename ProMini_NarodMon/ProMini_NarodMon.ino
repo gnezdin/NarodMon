@@ -6,7 +6,7 @@
 #include <RF24.h> // https://github.com/maniacbug/RF24
 #include <SoftwareSerial.h>
 #include <ArduinoJson.h>
-#include <dht.h>
+#include <DHT.h>
 #include <Wire.h>
 #include <BMP085.h>
 
@@ -15,13 +15,13 @@
 #define DHT_COUNTER_TIMEOUT 6000
 #define SEND_COUNTER_TIMEOUT 60000
 
-dht DHT;
+#define DHTPIN 8 
+#define DHTTYPE DHT21
+
+DHT dht(DHTPIN, DHTTYPE);
 
 
 BMP085 bmp = BMP085();  
-
-
-#define DHT11_PIN 8
 
 const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор передачи, "труба"
 
@@ -85,44 +85,24 @@ union
 void ReadDHT()
 {
     // READ DATA
-  
-    int chk = DHT.read21(DHT11_PIN);
-//    switch (chk)
-//    {
-//      case DHTLIB_OK:
-//       DH = 0;
-//      break;
-//      case DHTLIB_ERROR_CONNECT:
-//       DH = 1;
-//      break;
-//      case DHTLIB_ERROR_TIMEOUT:
-//       DH = 2;
-//      break;  
-//      case DHTLIB_ERROR_CHECKSUM:
-//       DH = 3;
-//      break;
-//      case DHTLIB_ERROR_ACK_L:
-//       DH = 4;
-//      break;
-//      case DHTLIB_ERROR_ACK_H:
-//       DH = 5;
-//      break;
-//      default:
-//       DH = 6;
-//      break;
-//    }
-    if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 10) & (DHT.temperature < 90))
-  {
-      HUM = DHT.humidity;
-      TEMP_IN = DHT.temperature;
+    float h = dht.readHumidity();
+    // Read temperature as Celsius (the default)
+    float t = dht.readTemperature();   
+    
+    // debug
+    softSerial.print("HUM: ");
+    softSerial.println(HUM);
+    softSerial.print("TEMP_IN: ");
+    softSerial.println(TEMP_IN);
 
-      // debug
-      softSerial.print("HUM: ");
-      softSerial.println(HUM);
-      softSerial.print("TEMP_IN: ");
-      softSerial.println(TEMP_IN);
-  }
+    if (isnan(h) || isnan(t)) 
+    {
+      //Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
 
+    HUM = h;
+    TEMP_IN = t;
 }
 
 void ReadBMP()
@@ -191,9 +171,7 @@ void setup()
   radio.openReadingPipe(1, pipe); // открываем первую трубу с индитификатором "pipe"
   radio.startListening(); // включаем приемник, начинаем слушать трубу
 
-
- // Wire.begin();
- // bmp.begin();
+  dht.begin();
   bmp.init();   
 }
 
