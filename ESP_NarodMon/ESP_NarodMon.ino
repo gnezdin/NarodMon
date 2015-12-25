@@ -15,7 +15,7 @@ const char* host = "narodmon.ru";
 const int httpPort = 8283;
 
 // replace with your channel's thingspeak API key, 
-String tsApiKey = "8XIYN39QEW35QO69"; 
+String tsApiKey = "SBS8SASVY5E921Z6"; 
 const char* tsServer = "api.thingspeak.com";
 
 // очередной принятый по UART байт
@@ -122,10 +122,12 @@ bool SendDataToTS()
   WiFiClient client;
   if (!client.connect(tsServer,80)) 
   {
+    //Serial.println("Connect to TS Server failed");
     return result;
   }
 
-  String postStr = tsApiKey;
+ // Serial.println("Connect to TS Server OK"); 
+  String postStr = "api_key=" + tsApiKey;
            postStr +="&field1=";
            postStr += String(TEMP_OUT);
            postStr +="&field2=";
@@ -149,7 +151,15 @@ bool SendDataToTS()
      client.print(postStr.length()); 
      client.print("\n\n"); 
      client.print(postStr);
-    
+
+     // читаем ответ с и отправляем его в сериал
+//     Serial.print("Requesting: ");  
+//     while(client.available())
+//     {
+//       String line = client.readStringUntil('\r');
+//       Serial.print(line); // хотя это можно убрать
+//     }
+     
      client.stop();
      
      result = true;
@@ -195,7 +205,7 @@ bool result = false;
   WiFiClient client;
   if (!client.connect(host, httpPort)) 
   {   
-     //Serial.println("connection failed");
+     //Serial.println("connection to NarodMon failed");
      return result;
   }
   
@@ -211,70 +221,32 @@ bool result = false;
   
   // отправляем данные с первого датчика
   client.print("#"); 
-  client.print("TEMP_OUT");
+  client.print("T1");
   client.print("#");
   client.print(TEMP_OUT);
   // название датчика
   client.print("#Окружающая температура");  
   client.println();
-
-  // отправляем данные с 2 датчика
-  client.print("#"); 
-  client.print("BAT");
-  client.print("#");
-  client.print(BAT);
-  // название датчика
-  client.print("#Напряжение батарей");  
-  client.println();
-
-  // отправляем данные с 3 датчика
-  client.print("#"); 
-  client.print("TEMP_IN");
-  client.print("#");
-  client.print(TEMP_IN);
-  // название датчика
-  client.print("#Температура внутри помещения");  
-  client.println();
-
-   // отправляем данные с 4 датчика
-  client.print("#"); 
-  client.print("HUM");
-  client.print("#");
-  client.print(HUM);
-  // название датчика
-  client.print("#Отн. влажность внутри помещения");  
-  client.println();
-
+  
    // отправляем данные с 5 датчика
   client.print("#"); 
   client.print("PRESS");
   client.print("#");
   client.print(PRESS);
   // название датчика
-  client.print("#Атмосферное давление");  
-  client.println();
-
-   // отправляем данные с 6 датчика
-  client.print("#"); 
-  client.print("TEMP_E");
-  client.print("#");
-  client.print(TEMP_E);
-  // название датчика
-  client.print("#Температура электроники");  
-  client.println();
- 
-   client.print("##");
+  client.print("#Атмосферное давление");    
+  client.println("##");
     
- // Serial.print("Requesting: ");  
-//  while(client.available())
-//  {
-//    String line = client.readStringUntil('\r');
-//    Serial.print(line); // хотя это можно убрать
-//    if (line.IndexOf("OK") >= 0)
-//    {
-//      NARODMON.STATUS = 1;
-//    }
-//  }
+//  Serial.print("Requesting: ");  
+  while(client.available())
+  {
+    String line = client.readStringUntil('\r');
+    Serial.print(line); // хотя это можно убрать
+    if (line.indexOf("OK") >= 0)
+    {
+     // NARODMON.STATUS = 1;
+    }
+  }
   
   client.stop();
  
@@ -339,8 +311,8 @@ void loop()
   // анализируем входящие данные JSON
   if (sw)
   {
-      Serial.print("json: ");
-      Serial.print(jsonIn);
+     // Serial.print("json: ");
+     // Serial.print(jsonIn);
       // парсим Json
       //
       // Step 1: Reserve memory space
@@ -401,6 +373,15 @@ void loop()
       // SendDataToNarodMon();
       INTERNET_STATUS = 0;
       if (SendDataToTS())
+      {
+         INTERNET_STATUS = 1;  
+      }
+        else
+        {
+          INTERNET_STATUS = 0;
+        }
+      
+      if (SendDataToNarodMon())
       {
          INTERNET_STATUS = 1;  
       }

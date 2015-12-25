@@ -13,7 +13,7 @@
 #define STS_LED_PIN 7 
 
 #define DHT_COUNTER_TIMEOUT 6000
-#define SEND_COUNTER_TIMEOUT 60000
+#define SEND_COUNTER_TIMEOUT 60000 // 60000
 
 #define DHTPIN 8 
 #define DHTTYPE DHT21
@@ -61,9 +61,9 @@ int  stsLed = 0;
 int stsLedCounter = 0;
 
 // счётчик для DHT и BMP
-long dhtCounter = 0;
+long dhtCounter = 100000;
 // счётчик отправки на народмон
-long sendCounter = 0;
+long sendCounter = 100000;
 
 char jsonIn[100];
 
@@ -90,10 +90,10 @@ void ReadDHT()
     float t = dht.readTemperature();   
     
     // debug
-    softSerial.print("HUM: ");
-    softSerial.println(HUM);
-    softSerial.print("TEMP_IN: ");
-    softSerial.println(TEMP_IN);
+//    softSerial.print("HUM: ");
+//    softSerial.println(HUM);
+//    softSerial.print("TEMP_IN: ");
+//    softSerial.println(TEMP_IN);
 
     if (isnan(h) || isnan(t)) 
     {
@@ -115,14 +115,14 @@ void ReadBMP()
   float tmp = temp;
 
   PRESS = (double) pres / 1000.0;
-  TEMP_E = tmp;
+  TEMP_E = tmp * 0.1;
 
 
-  softSerial.print("PRESS: ");
-  softSerial.println(PRESS);
-
-  softSerial.print("TEMP_E: ");
-  softSerial.println(TEMP_E);
+//  softSerial.print("PRESS: ");
+//  softSerial.println(PRESS);
+//
+//  softSerial.print("TEMP_E: ");
+//  softSerial.println(TEMP_E);
 }
 
 void SendDataToESP()
@@ -148,7 +148,7 @@ root["temp_e"] = TEMP_E;
 root.printTo(Serial);
 
 // debug
-root.printTo(softSerial);
+//root.printTo(softSerial);
 }
 
 void setup() 
@@ -219,15 +219,15 @@ void loop()
   // анализируем входящие данные JSON
   if (sw)
   {
-      softSerial.print("jsonIn: ");
-      softSerial.print(jsonIn);
+      //softSerial.print("jsonIn: ");
+    //  softSerial.print(jsonIn);
 
       StaticJsonBuffer<200> jsonBuffer;
       JsonObject& root = jsonBuffer.parseObject(jsonIn);
 
       if (!root.success())
       {
-        softSerial.println("parseObject() failed");
+       // softSerial.println("parseObject() failed");
         return;
       }
 
@@ -265,7 +265,7 @@ void loop()
         }
 
        // отправляем данные в ESP8266
-       SendDataToESP();
+      // SendDataToESP();
   }  
   // Update StatusLed
   switch(stsLed)
@@ -308,9 +308,9 @@ void loop()
      pos++;
   }
   
-  softSerial.print("Data Recieve: ");
-  softSerial.print(tmp.f);
-  softSerial.print(" oC");
+ // softSerial.print("Data Recieve: ");
+ // softSerial.print(tmp.f);
+ // softSerial.print(" oC");
 
   TEMP_OUT = tmp.f;
 
@@ -322,9 +322,9 @@ void loop()
      pos++;
   }
   
-  softSerial.print(" [VCC: ");
-  softSerial.print(lng.l);
-  softSerial.println("mV]");
+ // softSerial.print(" [VCC: ");
+ // softSerial.print(lng.l);
+ // softSerial.println("mV]");
 
   BAT = lng.l;
 }
