@@ -54,11 +54,13 @@ double TEMP_E = 0;
 
 // переменные от ESP8266
 int WIFI_STATUS = 0;
-int INTERNET_STATUS = 0;
+int THINGSPEAK_STATUS = 0;
+int NARODMON_STATUS = 0;
 
-// переменная для светодиода 0-выкл, 1-вкл, 2-мигание
+// переменная для светодиода 0-выкл, 1-вкл, 2-мигание, 3 - одна вспышка (ошибка TS), 4 - две вспышки (ошибка Narodmon)
 int  stsLed = 0;
 int stsLedCounter = 0;
+int stsLedCounterOff = 0;
 
 // счётчик для DHT и BMP
 long dhtCounter = 100000;
@@ -156,6 +158,7 @@ void setup()
   memset(jsonIn, 0, sizeof(jsonIn));
   Serial.begin(9600);
   softSerial.begin(9600);
+  delay(1000);
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
   digitalWrite(STS_LED_PIN, 0);
@@ -236,9 +239,14 @@ void loop()
          WIFI_STATUS = root["wifi_status"];
       }
 
-       if (root.containsKey("internet_status"))
+       if (root.containsKey("thingspeak_status"))
       {
-         INTERNET_STATUS = root["internet_status"];
+         THINGSPEAK_STATUS = root["thingspeak_status"];
+      }
+
+       if (root.containsKey("narodmon_status"))
+      {
+         NARODMON_STATUS = root["narodmon_status"];
       }
       
       // очищаем входной буфер
@@ -247,11 +255,11 @@ void loop()
       jsonCnt = 0;    
 
       // отображаем статус на LED
-      if ((WIFI_STATUS) & (INTERNET_STATUS))
+      if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (NARODMON_STATUS))
       {
         stsLed = 1;
       }
-       else if ((WIFI_STATUS) & (!INTERNET_STATUS))
+       else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (!NARODMON_STATUS))
        {
           stsLed = 2;
        }
@@ -259,9 +267,13 @@ void loop()
        {
           stsLed = 0;
        }
-        else
+        else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (NARODMON_STATUS))
         {
-           stsLed = 2;
+           stsLed = 3;
+        }
+        else if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (!NARODMON_STATUS))
+        {
+           stsLed = 4;
         }
 
        // отправляем данные в ESP8266
@@ -284,6 +296,44 @@ void loop()
       {
         digitalWrite(STS_LED_PIN, 0); 
         stsLedCounter = 0;
+      }
+       else if (stsLedCounter > 50)
+      {
+        digitalWrite(STS_LED_PIN, 1); 
+      }
+    break; 
+     case 3:
+      stsLedCounter++;
+      if (stsLedCounter > 160)
+      {
+        stsLedCounter = 0;
+      }
+       else if (stsLedCounter > 60)
+      {
+        digitalWrite(STS_LED_PIN, 0);         
+      }
+       else if (stsLedCounter > 50)
+      {
+        digitalWrite(STS_LED_PIN, 1); 
+      }
+    break;
+     case 4:
+      stsLedCounter++;
+      if (stsLedCounter > 210)
+      {
+        stsLedCounter = 0;
+      }
+       else if (stsLedCounter > 110)
+      {
+        digitalWrite(STS_LED_PIN, 0);         
+      }
+       else if (stsLedCounter > 100)
+      {
+        digitalWrite(STS_LED_PIN, 1); 
+      }
+       else if (stsLedCounter > 60)
+      {
+        digitalWrite(STS_LED_PIN, 0);         
       }
        else if (stsLedCounter > 50)
       {

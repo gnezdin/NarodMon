@@ -42,7 +42,8 @@ double TEMP_E = 0;
 
 // переменные от ESP8266
 int WIFI_STATUS = 0;
-int INTERNET_STATUS = 0;
+int THINGSPEAK_STATUS = 0;
+int NARODMON_STATUS = 0;
 
 char jsonIn[100];
 
@@ -51,7 +52,8 @@ void ConnectToWiFi()
 {
     // Подключаемся к wifi
     WIFI_STATUS = 0;
-    INTERNET_STATUS = 0;
+    THINGSPEAK_STATUS = 0;
+    NARODMON_STATUS = 0;
 //  Serial.println();
 //  Serial.println();
 //  Serial.print("Connecting to ");
@@ -93,7 +95,8 @@ void SendDataToArduino()
   //
   JsonObject& js = jsonBuffer.createObject();
   js["wifi_status"] = WIFI_STATUS;
-  js["internet_status"] = INTERNET_STATUS;
+  js["thingspeak_status"] = THINGSPEAK_STATUS;
+  js["narodmon_status"] = NARODMON_STATUS;
 
 //
 // Step 3: Generate the JSON string
@@ -232,7 +235,7 @@ bool result = false;
   client.print("#"); 
   client.print("PRESS");
   client.print("#");
-  client.print(PRESS);
+  client.print(PRESS * 7.5);// мм рт. ст.
   // название датчика
   client.print("#Атмосферное давление");    
   client.println("##");
@@ -262,7 +265,7 @@ void setup()
 {
   memset(jsonIn, 0, sizeof(jsonIn));
   Serial.begin(9600);
-  
+  delay(1000);
   ConnectToWiFi();
   SendDataToArduino();
 }
@@ -371,26 +374,29 @@ void loop()
 
        // отправляем данные в интернет
       // SendDataToNarodMon();
-      INTERNET_STATUS = 0;
+      THINGSPEAK_STATUS = 0;
+      NARODMON_STATUS = 0;
+      
       if (SendDataToTS())
       {
-         INTERNET_STATUS = 1;  
+         THINGSPEAK_STATUS = 1;  
       }
         else
         {
-          INTERNET_STATUS = 0;
+          THINGSPEAK_STATUS = 0;
         }
       
       if (SendDataToNarodMon())
       {
-         INTERNET_STATUS = 1;  
+         NARODMON_STATUS = 1;  
       }
         else
         {
-          INTERNET_STATUS = 0;
+          NARODMON_STATUS = 0;
         }
       SendDataToArduino();
   }  
   delay(10);
 }
+
 
