@@ -13,11 +13,16 @@
 // светодиод статуса
 #define STS_LED_PIN 7
 
+// пин сброса ESP
+#define ESP_RESET_PIN 6 
+
 // светодиод встроенный Arduino
 #define ALED 13 
 
+// таймауты *10 (мс.)
 #define DHT_COUNTER_TIMEOUT 6000
 #define SEND_COUNTER_TIMEOUT 60000 // 60000
+#define ESP_REQUEST_TIMEOUT 3000
 
 #define DHTPIN 8 
 #define DHTTYPE DHT21
@@ -43,6 +48,9 @@ byte jsonCnt = 0;
 // флаг приёма окончания запроса Json
 bool sw = false;
 
+// таймер ожидания ответа от ESP и флаг
+long espCounter = 0;
+
 // Температура окр. воздуха 
 double TEMP_OUT = 0;
 // Напряжение батареи темп. передатчика
@@ -56,6 +64,7 @@ double PRESS = 0;
 // Температура электроники (BMP180) 
 double TEMP_E = 0;
 
+
 // переменные от ESP8266
 int WIFI_STATUS = 0;
 int THINGSPEAK_STATUS = 0;
@@ -64,7 +73,6 @@ int NARODMON_STATUS = 0;
 // переменная для светодиода 0-выкл, 1-вкл, 2-мигание, 3 - одна вспышка (ошибка TS), 4 - две вспышки (ошибка Narodmon)
 int  stsLed = 0;
 int stsLedCounter = 0;
-int stsLedCounterOff = 0;
 
 // переменные для светодиода Arduino
 bool aLedSw = false;
@@ -164,6 +172,10 @@ root.printTo(Serial);
 void setup() 
 {
   memset(jsonIn, 0, sizeof(jsonIn));
+
+  pinMode(ESP_RESET_PIN, OUTPUT);
+  digitalWrite(ESP_RESET_PIN, 1);
+  
   Serial.begin(9600);
   softSerial.begin(9600);
   delay(1000);
@@ -173,7 +185,6 @@ void setup()
 
   pinMode(ALED, OUTPUT);
   digitalWrite(ALED, 0);
-  delay(10);
 
   // NRF init
   radio.begin();
@@ -233,9 +244,13 @@ void loop()
   // анализируем входящие данные JSON
   if (sw)
   {
-      //softSerial.print("jsonIn: ");
-    //  softSerial.print(jsonIn);
-
+      // сброс счётчика ожидания ответа ESP
+      if (espCounter > 0)
+      {
+         digitalWrite(ESP_RESET_PIN, 1);
+         espCounter = 0;
+      }
+      
       StaticJsonBuffer<200> jsonBuffer;
       JsonObject& root = jsonBuffer.parseObject(jsonIn);
 
@@ -403,11 +418,27 @@ void loop()
    // SendDataToESP();
   }
 
+  if (espCounter > 0)
+  {
+    espCounter--;
+    // reset ESP
+    if (espCounter == 10)
+    {
+      digitalWrite(ESP_RESET_PIN, 0);
+    }
+
+    if (espCounter <= 0)
+    {
+      digitalWrite(ESP_RESET_PIN, 1);
+    }
+  }
+
   sendCounter++;
   if (sendCounter > SEND_COUNTER_TIMEOUT)
   {
     sendCounter = 0;
     SendDataToESP();
+    espCounter = ESP_REQUEST_TIMEOUT;
   }
 
 
