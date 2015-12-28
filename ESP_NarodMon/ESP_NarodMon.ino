@@ -112,13 +112,6 @@ bool SendDataToTS()
 {
   bool result = false;
 
-  // проверяем подключен ли WiFi и переподключаемся, если что
-  if (WiFi.status() != WL_CONNECTED) 
-  {
-      WiFi.disconnect();
-      ConnectToWiFi();
-  }
-
   if (WiFi.status() != WL_CONNECTED) 
   {
       return result;
@@ -191,13 +184,6 @@ bool SendDataToNarodMon()
 //   Serial.println(TEMP_E);
 
 bool result = false;
-
-  // проверяем подключен ли WiFi и переподключаемся, если что
-  if (WiFi.status() != WL_CONNECTED) 
-  {
-      WiFi.disconnect();
-      ConnectToWiFi();
-  }
 
   if (WiFi.status() != WL_CONNECTED) 
   {
@@ -378,6 +364,13 @@ void loop()
       // SendDataToNarodMon();
       THINGSPEAK_STATUS = 0;
       NARODMON_STATUS = 0;
+
+       // проверяем подключен ли WiFi и переподключаемся, если что
+      if (WiFi.status() != WL_CONNECTED) 
+      {
+          WiFi.disconnect();
+          ConnectToWiFi();
+      }
       
       if (SendDataToTS())
       {
