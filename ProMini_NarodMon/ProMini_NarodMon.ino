@@ -10,7 +10,11 @@
 #include <Wire.h>
 #include <BMP085.h>
 
-#define STS_LED_PIN 7 
+// светодиод статуса
+#define STS_LED_PIN 7
+
+// светодиод встроенный Arduino
+#define ALED 13 
 
 #define DHT_COUNTER_TIMEOUT 6000
 #define SEND_COUNTER_TIMEOUT 60000 // 60000
@@ -61,6 +65,10 @@ int NARODMON_STATUS = 0;
 int  stsLed = 0;
 int stsLedCounter = 0;
 int stsLedCounterOff = 0;
+
+// переменные для светодиода Arduino
+bool aLedSw = false;
+int aLedCounter = 0;
 
 // счётчик для DHT и BMP
 long dhtCounter = 100000;
@@ -162,6 +170,9 @@ void setup()
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
   digitalWrite(STS_LED_PIN, 0);
+
+  pinMode(ALED, OUTPUT);
+  digitalWrite(ALED, 0);
   delay(10);
 
   // NRF init
@@ -397,6 +408,23 @@ void loop()
   {
     sendCounter = 0;
     SendDataToESP();
+  }
+
+
+  // Arduino LED blink
+  aLedCounter++;
+  if (aLedCounter > 100)
+  {
+    aLedCounter = 0;
+    aLedSw = !aLedSw;
+    if (aLedSw)
+    {
+      digitalWrite(ALED, 1); 
+    }
+    else
+    {
+      digitalWrite(ALED, 0); 
+    }
   }
   
   delay(10);   

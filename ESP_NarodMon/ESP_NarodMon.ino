@@ -47,6 +47,9 @@ int NARODMON_STATUS = 0;
 
 char jsonIn[100];
 
+// Use WiFiClient class to create TCP connections
+  WiFiClient client;
+
 
 void ConnectToWiFi()
 {
@@ -122,7 +125,7 @@ bool SendDataToTS()
   }
 
   // Use WiFiClient class to create TCP connections
-  WiFiClient client;
+ // WiFiClient client;
   if (!client.connect(tsServer,80)) 
   {
     //Serial.println("Connect to TS Server failed");
@@ -204,8 +207,7 @@ bool result = false;
 //  Serial.print("connecting to ");
 //  Serial.println(host);
   
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
+  
   if (!client.connect(host, httpPort)) 
   {   
      //Serial.println("connection to NarodMon failed");
@@ -241,15 +243,15 @@ bool result = false;
   client.println("##");
     
 //  Serial.print("Requesting: ");  
-  while(client.available())
-  {
-    String line = client.readStringUntil('\r');
-    Serial.print(line); // хотя это можно убрать
-    if (line.indexOf("OK") >= 0)
-    {
-     // NARODMON.STATUS = 1;
-    }
-  }
+//  while(client.available())
+//  {
+//    String line = client.readStringUntil('\r');
+//    Serial.print(line); // хотя это можно убрать
+//    if (line.indexOf("OK") >= 0)
+//    {
+//     // NARODMON.STATUS = 1;
+//    }
+//  }
   
   client.stop();
  
@@ -267,7 +269,7 @@ void setup()
   Serial.begin(9600);
   delay(1000);
   ConnectToWiFi();
-  SendDataToArduino();
+  SendDataToArduino();//21 сек max
 }
 
 void loop() 
@@ -329,7 +331,7 @@ void loop()
 
       if (!root.success())
       {
-        Serial.println("parseObject() failed");
+       // Serial.println("parseObject() failed");
         return;
       }
 
