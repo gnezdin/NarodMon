@@ -14,10 +14,10 @@
 #define STS_LED_PIN 7
 
 // пин сброса ESP
-#define ESP_RESET_PIN 6 
+#define ESP_RESET_PIN 4 
 
 // светодиод встроенный Arduino
-#define ALED 13 
+//#define ALED 13 
 
 // таймауты *10 (мс.)
 #define DHT_COUNTER_TIMEOUT 6000
@@ -75,8 +75,8 @@ int  stsLed = 0;
 int stsLedCounter = 0;
 
 // переменные для светодиода Arduino
-bool aLedSw = false;
-int aLedCounter = 0;
+//bool aLedSw = false;
+//int aLedCounter = 0;
 
 // счётчик для DHT и BMP
 long dhtCounter = 100000;
@@ -173,18 +173,19 @@ void setup()
 {
   memset(jsonIn, 0, sizeof(jsonIn));
 
-  pinMode(ESP_RESET_PIN, OUTPUT);
-  digitalWrite(ESP_RESET_PIN, 1);
+ 
   
   Serial.begin(9600);
   softSerial.begin(9600);
   delay(1000);
+   pinMode(ESP_RESET_PIN, OUTPUT);
+  digitalWrite(ESP_RESET_PIN, 1);
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
   digitalWrite(STS_LED_PIN, 0);
 
-  pinMode(ALED, OUTPUT);
-  digitalWrite(ALED, 0);
+//  pinMode(ALED, OUTPUT);
+ // digitalWrite(ALED, 0);
 
   // NRF init
   radio.begin();
@@ -422,7 +423,7 @@ void loop()
   {
     espCounter--;
     // reset ESP
-    if (espCounter == 10)
+    if (espCounter == 100)
     {
       digitalWrite(ESP_RESET_PIN, 0);
     }
@@ -442,21 +443,6 @@ void loop()
   }
 
 
-  // Arduino LED blink
-  aLedCounter++;
-  if (aLedCounter > 100)
-  {
-    aLedCounter = 0;
-    aLedSw = !aLedSw;
-    if (aLedSw)
-    {
-      digitalWrite(ALED, 1); 
-    }
-    else
-    {
-      digitalWrite(ALED, 0); 
-    }
-  }
   
   delay(10);   
 }
