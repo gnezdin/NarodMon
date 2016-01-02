@@ -375,6 +375,7 @@ void loop()
       if (SendDataToTS())
       {
          THINGSPEAK_STATUS = 1;  
+         WIFI_STATUS = 1;
       }
         else
         {
@@ -384,6 +385,7 @@ void loop()
       if (SendDataToNarodMon())
       {
          NARODMON_STATUS = 1;  
+         WIFI_STATUS = 1;
       }
         else
         {
