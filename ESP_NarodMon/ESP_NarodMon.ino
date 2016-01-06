@@ -371,10 +371,14 @@ void loop()
           WiFi.disconnect();
           ConnectToWiFi();
       }
-      
+       else
+       {
+         WIFI_STATUS = 1;     
+       }
+       
       if (SendDataToTS())
       {
-         THINGSPEAK_STATUS = 1;  
+         THINGSPEAK_STATUS = 1;        
       }
         else
         {
