@@ -27,17 +27,17 @@ byte jsonCnt = 0;
 // флаг приёма окончания запроса Json
 bool sw = false;
 
-// Температура окр. воздуха 
+// Температура окр. воздуха, оС
 double TEMP_OUT = 0;
-// Напряжение батареи темп. передатчика
-long BAT = 0;
-// Температура в помещении (DHT21) 
+// Напряжение батареи темп. передатчика, В
+double BAT = 0;
+// Температура в помещении (DHT21), оС
 double TEMP_IN = 0;
-// Влажность в помещении (DHT21) 
+// Влажность в помещении (DHT21), % 
 double HUM = 0;
-// Атм. давление, кПа (BMP180) 
+// Атм. давление, кПа (BMP180), кПа 
 double PRESS = 0;
-// Температура электроники (BMP180) 
+// Температура электроники (BMP180), оС 
 double TEMP_E = 0;
 
 // переменные от ESP8266
@@ -57,11 +57,7 @@ void ConnectToWiFi()
     WIFI_STATUS = 0;
     THINGSPEAK_STATUS = 0;
     NARODMON_STATUS = 0;
-//  Serial.println();
-//  Serial.println();
-//  Serial.print("Connecting to ");
-//  Serial.println(ssid);
-  
+      
   WiFi.begin(ssid, password);
   
   int wifiCounter = 0;
@@ -69,42 +65,24 @@ void ConnectToWiFi()
   {
     wifiCounter++;
     delay(500);
-   // Serial.print(".");
   }
 
-//  Serial.println();
-//  Serial.println("WiFi connected");  
-//  Serial.print("IP address: ");
-//  Serial.println(WiFi.localIP());
-//  Serial.print("MAC address: ");
-//  Serial.println(WiFi.macAddress());
-//  Serial.println();
   if (WiFi.status() ==  WL_CONNECTED)
   {
     WIFI_STATUS = 1;
   }
-//  SendDataToArduino();
 }
 
 void SendDataToArduino()
 {
-  //
-  // Step 1: Reserve memory space
-  //
   StaticJsonBuffer<100> jsonBuffer;
 
-  //
-  // Step 2: Build object tree in memory
-  //
   JsonObject& js = jsonBuffer.createObject();
   js["wifi_status"] = WIFI_STATUS;
   js["thingspeak_status"] = THINGSPEAK_STATUS;
   js["narodmon_status"] = NARODMON_STATUS;
 
-//
-// Step 3: Generate the JSON string
-//
-js.printTo(Serial);
+  js.printTo(Serial);
 }
 
 
@@ -117,15 +95,11 @@ bool SendDataToTS()
       return result;
   }
 
-  // Use WiFiClient class to create TCP connections
- // WiFiClient client;
   if (!client.connect(tsServer,80)) 
   {
-    //Serial.println("Connect to TS Server failed");
     return result;
   }
 
- // Serial.println("Connect to TS Server OK"); 
   String postStr = "api_key=" + tsApiKey;
            postStr +="&field1=";
            postStr += String(TEMP_OUT);
@@ -168,46 +142,24 @@ bool SendDataToTS()
 bool SendDataToNarodMon()
 
 {
-   // debug
-//   Serial.println("SendData ...");
-//   Serial.print("TEMP_OUT: ");
-//   Serial.println(TEMP_OUT);
-//   Serial.print("BAT: ");
-//   Serial.println(BAT);
-//   Serial.print("TEMP_IN: ");
-//   Serial.println(TEMP_IN);
-//   Serial.print("HUM: ");
-//   Serial.println(HUM);
-//   Serial.print("PRESS: ");
-//   Serial.println(PRESS);
-//   Serial.print("TEMP_E: ");
-//   Serial.println(TEMP_E);
-
 bool result = false;
 
   if (WiFi.status() != WL_CONNECTED) 
   {
       return result;
   }
-    //  // подключаемся к серверу 
-//  Serial.print("connecting to ");
-//  Serial.println(host);
-  
-  
+    //  // подключаемся к серверу   
   if (!client.connect(host, httpPort)) 
   {   
-     //Serial.println("connection to NarodMon failed");
      return result;
   }
   
-  // отправляем данные  
-  //Serial.println("Sending..."); 
-      // заголовок
+  // отправляем данные   
+  // заголовок
   client.print("#");
   client.print(deviceMac); // отправляем МАС нашей ESP8266
   client.print("#");
   client.print("Novopolotsk_station"); // название устройства
-//  client.print("#55.53582#28.65198"); // координаты местонахождения датчика
   client.println();
   
   // отправляем данные с первого датчика
@@ -219,7 +171,7 @@ bool result = false;
   client.print("#Окружающая температура");  
   client.println();
   
-   // отправляем данные с 5 датчика
+  // отправляем данные с 5 датчика
   client.print("#"); 
   client.print("PRESS");
   client.print("#");
@@ -240,8 +192,6 @@ bool result = false;
 //  }
   
   client.stop();
- 
- // Serial.println("Closing connection");
 
   result = true;
   return result;
@@ -302,28 +252,14 @@ void loop()
   // анализируем входящие данные JSON
   if (sw)
   {
-     // Serial.print("json: ");
-     // Serial.print(jsonIn);
-      // парсим Json
-      //
-      // Step 1: Reserve memory space
-      //
       StaticJsonBuffer<200> jsonBuffer;
 
-      //
-      // Step 2: Deserialize the JSON string
-      //
       JsonObject& root = jsonBuffer.parseObject(jsonIn);
 
       if (!root.success())
       {
-       // Serial.println("parseObject() failed");
         return;
       }
-
-      //
-      // Step 3: Retrieve the values
-      //
 
       if (root.containsKey("temp_out"))
       {
@@ -360,12 +296,11 @@ void loop()
       sw = false;
       jsonCnt = 0;    
 
-       // отправляем данные в интернет
-      // SendDataToNarodMon();
+      // отправляем данные в интернет
       THINGSPEAK_STATUS = 0;
       NARODMON_STATUS = 0;
 
-       // проверяем подключен ли WiFi и переподключаемся, если что
+      // проверяем подключен ли WiFi и переподключаемся, если что
       if (WiFi.status() != WL_CONNECTED) 
       {
           WiFi.disconnect();

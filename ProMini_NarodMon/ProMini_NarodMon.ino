@@ -16,9 +16,6 @@
 // пин сброса ESP
 #define ESP_RESET_PIN 4 
 
-// светодиод встроенный Arduino
-//#define ALED 13 
-
 // таймауты *10 (мс.)
 #define DHT_COUNTER_TIMEOUT 6000
 #define SEND_COUNTER_TIMEOUT 60000 // 60000
@@ -36,8 +33,8 @@ const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор переда
 
 RF24 radio(9, 10); // CE, CSN
 
-// организуем софтовый UART для общения с BT модулем HC-05
-SoftwareSerial softSerial(5, 6); // RX, TX
+// организуем софтовый UART
+//SoftwareSerial softSerial(5, 6); // RX, TX
 
 // очередной принятый по UART байт
 byte incommingByte = 0;
@@ -54,7 +51,7 @@ long espCounter = 0;
 // Температура окр. воздуха 
 double TEMP_OUT = 0;
 // Напряжение батареи темп. передатчика
-long BAT = 0;
+double BAT = 0;
 // Температура в помещении (DHT21) 
 double TEMP_IN = 0;
 // Влажность в помещении (DHT21) 
@@ -73,10 +70,6 @@ int NARODMON_STATUS = 0;
 // переменная для светодиода 0-выкл, 1-вкл, 2-мигание, 3 - одна вспышка (ошибка TS), 4 - две вспышки (ошибка Narodmon)
 int  stsLed = 0;
 int stsLedCounter = 0;
-
-// переменные для светодиода Arduino
-//bool aLedSw = false;
-//int aLedCounter = 0;
 
 // счётчик для DHT и BMP
 long dhtCounter = 100000;
@@ -125,7 +118,6 @@ void ReadDHT()
 
 void ReadBMP()
 {
-
   long pres = 0; //bmp.readPressure();
   bmp.getPressure(&pres);
   long temp = 0;
@@ -134,58 +126,35 @@ void ReadBMP()
 
   PRESS = (double) pres / 1000.0;
   TEMP_E = tmp * 0.1;
-
-
-//  softSerial.print("PRESS: ");
-//  softSerial.println(PRESS);
-//
-//  softSerial.print("TEMP_E: ");
-//  softSerial.println(TEMP_E);
 }
 
 void SendDataToESP()
 {
-   //
-// Step 1: Reserve memory space
-//
-StaticJsonBuffer<200> jsonBuffer;
-
-//
-// Step 2: Build object tree in memory
-//
-JsonObject& root = jsonBuffer.createObject();
-root["temp_out"] = TEMP_OUT;
-root["bat"] = BAT;
-root["temp_in"] = TEMP_IN;
-root["hum"] = HUM;
-root["press"] = PRESS;
-root["temp_e"] = TEMP_E;
-//
-// Step 3: Generate the JSON string
-//
-root.printTo(Serial);
-
-// debug
-//root.printTo(softSerial);
+  StaticJsonBuffer<200> jsonBuffer;
+ 
+  JsonObject& root = jsonBuffer.createObject();
+  root["temp_out"] = TEMP_OUT;
+  root["bat"] = BAT;
+  root["temp_in"] = TEMP_IN;
+  root["hum"] = HUM;
+  root["press"] = PRESS;
+  root["temp_e"] = TEMP_E;
+ 
+  root.printTo(Serial);
 }
 
 void setup() 
 {
   memset(jsonIn, 0, sizeof(jsonIn));
 
- 
-  
   Serial.begin(9600);
-  softSerial.begin(9600);
+ // softSerial.begin(9600);
   delay(1000);
-   pinMode(ESP_RESET_PIN, OUTPUT);
+  pinMode(ESP_RESET_PIN, OUTPUT);
   digitalWrite(ESP_RESET_PIN, 1);
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
   digitalWrite(STS_LED_PIN, 0);
-
-//  pinMode(ALED, OUTPUT);
- // digitalWrite(ALED, 0);
 
   // NRF init
   radio.begin();
@@ -257,7 +226,6 @@ void loop()
 
       if (!root.success())
       {
-       // softSerial.println("parseObject() failed");
         return;
       }
 
@@ -303,8 +271,7 @@ void loop()
            stsLed = 4;
         }
 
-       // отправляем данные в ESP8266
-      // SendDataToESP();
+  
   }  
   // Update StatusLed
   switch(stsLed)
@@ -369,7 +336,6 @@ void loop()
     break;      
   }
 
-
   // Считываем NRF
   if (radio.available())
 {
@@ -385,10 +351,6 @@ void loop()
      pos++;
   }
   
- // softSerial.print("Data Recieve: ");
- // softSerial.print(tmp.f);
- // softSerial.print(" oC");
-
   TEMP_OUT = tmp.f;
 
   // получаем значение напряжения
@@ -399,25 +361,18 @@ void loop()
      pos++;
   }
   
- // softSerial.print(" [VCC: ");
- // softSerial.print(lng.l);
- // softSerial.println("mV]");
-
-  BAT = lng.l;
+  BAT = (double) lng.l / 1000.0 ; //mV -> V
 }
 
  // считываем DHT
  // чтение датчиков
  dhtCounter++;
-  if (dhtCounter > DHT_COUNTER_TIMEOUT)
-  {
+ if (dhtCounter > DHT_COUNTER_TIMEOUT)
+ {
     dhtCounter = 0;
     ReadDHT();
     ReadBMP();
-    
-    //debug!!!!!
-   // SendDataToESP();
-  }
+ }
 
   if (espCounter > 0)
   {
@@ -441,8 +396,6 @@ void loop()
     SendDataToESP();
     espCounter = ESP_REQUEST_TIMEOUT;
   }
-
-
   
   delay(10);   
 }
