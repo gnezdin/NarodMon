@@ -4,7 +4,7 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h> // https://github.com/maniacbug/RF24
-//#include <SoftwareSerial.h>
+#include <SoftwareSerial.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <Wire.h>
@@ -34,7 +34,7 @@ const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор переда
 RF24 radio(9, 10); // CE, CSN
 
 // организуем софтовый UART
-//SoftwareSerial softSerial(5, 6); // RX, TX
+SoftwareSerial softSerial(5, 6); // RX, TX
 
 // очередной принятый по UART байт
 byte incommingByte = 0;
@@ -77,7 +77,6 @@ long dhtCounter = 100000;
 long sendCounter = 100000;
 
 char jsonIn[100];
-
 
 void ReadDHT()
 {
@@ -126,18 +125,21 @@ void SendDataToESP()
   root["press"] = PRESS;
   root["temp_e"] = TEMP_E;
  
-  root.printTo(Serial);
+  root.printTo(softSerial);
 }
 
 void setup() 
 {
   memset(jsonIn, 0, sizeof(jsonIn));
 
-  Serial.begin(9600);
- // softSerial.begin(9600);
-  delay(1000);
+  Serial.begin(57600);
+  softSerial.begin(9600);
+
   pinMode(ESP_RESET_PIN, OUTPUT);
   digitalWrite(ESP_RESET_PIN, 1);
+  
+  delay(1000);
+  
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
   digitalWrite(STS_LED_PIN, 0);
@@ -201,7 +203,7 @@ void loop()
   if (sw)
   {
       // сброс счётчика ожидания ответа ESP
-      if ((espCounter > 0) && (espCounter <= 100))
+      if (espCounter > 0)
       {
          digitalWrite(ESP_RESET_PIN, 1);
          espCounter = 0;
@@ -325,64 +327,53 @@ void loop()
   // Считываем NRF
   if (radio.available())
   {
-    byte data[8];
+    union
+    {
+      float f;
+      unsigned char buf[4];
+    }tmp;
 
     union
-  {
-    float f;
-    unsigned char buf[4];
-  }tmp;
+    {
+      long l;
+      unsigned char lBuf[4];
+    } lng;
 
-  union
-  {
-    long l;
-    unsigned char lBuf[4];
-  } lng;
+    byte data[8];
     // читаем данные и указываем сколько байт читать
     radio.read(&data, sizeof(data));
 
 
     byte  pos = 0;
-    //флаг на случай, если пришли одни нули от ESP
-    bool noolFlag = true;
 
     for (byte i = 0; i < 4; i++)
     {
       tmp.buf[i] = data[pos]; 
-      if (tmp.buf[i] != 0) noolFlag = false;
       pos++;
     }
-
-    if (!noolFlag)
-    {
-      TEMP_OUT = tmp.f;
-    }
+  
+    TEMP_OUT = tmp.f;
 
     // получаем значение напряжения
     pos = 4;
-    noolFlag = true;
     for (byte i = 0; i < 4; i++)
     {
-      lng.lBuf[i] = data[pos];
-      if (lng.lBuf[i] != 0) noolFlag = false; 
+      lng.lBuf[i] = data[pos]; 
       pos++;
     }
+  
+    BAT = (double) lng.l / 1000.0 ; //mV -> V
+  }
 
-    if(!noolFlag)
-    {  
-      BAT = (double) lng.l / 1000.0 ; //mV -> V
-    }
-}
-
- // считываем DHT
- // чтение датчиков
- dhtCounter++;
- if (dhtCounter > DHT_COUNTER_TIMEOUT)
- {
+  // считываем DHT
+  // чтение датчиков
+  dhtCounter++;
+  if (dhtCounter > DHT_COUNTER_TIMEOUT)
+  {
     dhtCounter = 0;
     ReadDHT();
     ReadBMP();
- }
+  }
 
   if (espCounter > 0)
   {
