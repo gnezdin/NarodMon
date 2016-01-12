@@ -1,0 +1,71 @@
+
+23:11:18[-> Setup] Memory Free: 1123
+[Setup] ESP_RESET_PIN set to 1
+[Setup] NRF Init
+[Setup] dht & bmp init
+[Setup] Print variables & constants:
+[Setup] SEND_COUNTER_TIMEOUT: 30000
+[Setup] DHT_COUNTER_TIMEOUT: 6000
+[Setup] stsLed: 0
+[<- Setup] Memory Free: 1123
+[loop. dhtCounter > DHT_COUNTER_TIMEOUT] Memory Free: 909
+[-> ReadDHT] Memory Free: 899
+[ReadDHT] h: nan; t: nan
+[ReadDHT] isnan(h) | isnan(t)
+[-> ReadBMP] Memory Free: 893
+[ReadBMP] pres: 97011; temp: 254
+[ReadBMP] PRESS: 97.01; TEMP_E: 25.40
+[loop. sendCounter > SEND_COUNTER_TIMEOUT] sendCounter set to 0
+[-> SendDataT
+23:11:19oESP] Memory Free: 691
+[SendDataToESP] JSON: {"temp_out":0.00,"bat":0.00,"temp_in":0.00,"hum":0.00,"press":97.01,"temp_e":25.40}
+[<- SendDataToESP] Memory Free: 691
+[loop. sendCounter > SEND_COUNTER_TIMEOUT] espCounter set to 3000
+23:11:20[-> loop. sw == true] Memory Free: 909
+[loop. sw == true] jsonIn: {"wifi_status":1,"thingspeak_status":0,"narodmon_status":0}
+[loop. sw == true] jsonBuffer.parseObject -> root.success
+[loop. sw == true] variables after json parse: Memory Free: 909
+[loop. sw == true] WIFI_STATUS: 1
+[loop. sw == true] THINGSPEAK_STATUS: 0
+[loop. sw == true] NARODMON_STATUS: 0
+[loop. sw == true] Clear jsonIn Buffer; sw set to false; jsonCnt set to 0
+[loop. sw == true] stsLed calculating
+[loop. sw == true] stsLed set to 2
+[<- loop. sw == true] Memory Free: 909
+23:11:31[-> loop. sw == true] Memory Free: 909
+[loop. sw == true] jsonIn: {"wifi_status":1,"thingspeak_status":1,"narodmon_status":1}
+[loop. sw == true] jsonBuffer.parseObject -> root.success
+[loop. sw == true] variables after json parse: Memory Free: 909
+[loop. sw == true] WIFI_STATUS: 1
+[loop. sw == true] THINGSPEAK_STATUS: 1
+[loop. sw == true] NARODMON_STATUS: 1
+[loop. sw == true] Clear jsonIn Buffer; sw set to false; jsonCnt set to 0
+[loop. sw == true] stsLed calculating
+[loop. sw == true] stsLed set to 1
+[<- loop. sw == true] Memory Free: 909
+23:11:50[loop. espCounter == 100] ESP_RESET_PIN set to 0
+23:11:51[loop. espCounter == 0] ESP_RESET_PIN set to 1
+23:11:52[-> loop. NRF data available] Memory Free: 909
+[loop. NRF data available] done: 1
+[loop. NRF data available] data: 0, 0, C6, C0, C0, B, 0, 0, 
+[loop. NRF data available] !noolFlag; TEMP_OUT: -6.19
+[loop. NRF data available] !noolFlag; BAT: 3.01
+[<- loop. NRF data available] Memory Free: 909
+23:11:54[-> loop. sw == true] Memory Free: 909
+[loop. sw == true] jsonIn: {"wifi_status":1,"thingspeak_status":0,"narodmon_status":0}
+[loop. sw == true] jsonBuffer.parseObject -> root.success
+[loop. sw == true] variables after json parse: Memory Free: 909
+[loop. sw == true] WIFI_STATUS: 1
+[loop. sw == true] THINGSPEAK_STATUS: 0
+[loop. sw == true] NARODMON_STATUS: 0
+[loop. sw == true] Clear jsonIn Buffer; sw set to false; jsonCnt set to 0
+[loop. sw == true] stsLed calculating
+[loop. sw == true] stsLed set to 2
+[<- loop. sw == true] Memory Free: 909
+23:12:22[loop. dhtCounter > DHT_COUNTER_TIMEOUT] Memory Free: 909
+[-> ReadDHT] Memory Free: 899
+[ReadDHT] h: nan; t: nan
+[ReadDHT] isnan(h) | isnan(t)
+[-> ReadBMP] Memory Free: 893
+[ReadBMP] pres: 97009; temp: 253
+[ReadBMP] PRESS: 97.01; TEMP_E: 25.30
