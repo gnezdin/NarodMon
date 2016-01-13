@@ -4,7 +4,7 @@
 //
 //
 // Для получения отладочных сообщений на SoftSerial - объявить define DEBUG
-#define DEBUG
+// #define DEBUG
 
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -85,10 +85,10 @@ int NARODMON_STATUS = 0;
 int  stsLed = 0;
 int stsLedCounter = 0;
 
-// счётчик для DHT и BMP
-long dhtCounter = 100000;
-// счётчик отправки на народмон
-long sendCounter = 100000;
+// счётчик для чтения данных DHT и BMP (1 раз в минуту)
+long dhtCounter = 0;
+// счётчик отправки на народмон и thingspeak (1 раз в 10 мин)
+long sendCounter = 0;
 
 char jsonIn[100];
 
@@ -195,9 +195,7 @@ void SendDataToESP()
   softSerial.print(F("[SendDataToESP] JSON: "));
   root.printTo(softSerial);
   softSerial.println();
-  softSerial.print(F("[<- SendDataToESP] "));
-  softSerial.print(F("Memory Free: "));
-  softSerial.println(memoryFree());
+  softSerial.println(F("[<- SendDataToESP] "));
   #endif
 }
 
@@ -256,9 +254,7 @@ void setup()
   softSerial.println(DHT_COUNTER_TIMEOUT);
   softSerial.print(F("[Setup] stsLed: "));
   softSerial.println(stsLed);
-  softSerial.print(F("[<- Setup] "));
-  softSerial.print(F("Memory Free: "));
-  softSerial.println(memoryFree());
+  softSerial.println(F("[<- Setup] "));
   #endif
 }
 
@@ -314,16 +310,27 @@ void loop()
       softSerial.println(jsonIn);
       #endif
       // сброс счётчика ожидания ответа ESP
-      if ((espCounter > 0) && (espCounter <= 100))
+      if (espCounter > 0)
       {
-         #ifdef DEBUG
-         softSerial.print(F("[loop. sw == true] (0 < espCounter <= 100); espCounter: "));
-         softSerial.println(espCounter);
-         softSerial.println(F("[loop. sw == true] ESP_RESET_PIN set to 1; espCounter set to 0"));
-         #endif
+         // если счётчик меньше 100, то на ESP уже пошёл RESET, поэтому снимаем RESET -> 1
+         if (espCounter <= 100)
+         {
+            digitalWrite(ESP_RESET_PIN, 1);
+
+            #ifdef DEBUG
+            softSerial.print(F("[loop. sw == true] (espCounter <= 100); espCounter: "));
+            softSerial.println(espCounter);
+            softSerial.println(F("[loop. sw == true] ESP_RESET_PIN set to 1"));
+            #endif
+         }
          
-         digitalWrite(ESP_RESET_PIN, 1);
          espCounter = 0;
+
+         #ifdef DEBUG
+         softSerial.print(F("[loop. sw == true] (espCounter > 0); espCounter: "));
+         softSerial.println(espCounter);
+         softSerial.println(F("[loop. sw == true] espCounter set to 0"));
+         #endif
       }
       
       StaticJsonBuffer<200> jsonBuffer;
@@ -422,9 +429,7 @@ void loop()
         }
 
    #ifdef DEBUG
-   softSerial.print(F("[<- loop. sw == true] "));
-   softSerial.print(F("Memory Free: "));
-   softSerial.println(memoryFree());
+   softSerial.println(F("[<- loop. sw == true] "));
    #endif
            
   }  
@@ -570,9 +575,7 @@ void loop()
     }
 
     #ifdef DEBUG
-    softSerial.print(F("[<- loop. NRF data available] "));
-    softSerial.print(F("Memory Free: "));
-    softSerial.println(memoryFree());
+    softSerial.println(F("[<- loop. NRF data available] "));
     #endif
 }
 
