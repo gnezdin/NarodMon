@@ -1,0 +1,2 @@
+All Channel Data: http://api.thingspeak.com/channels/73874/feeds.json?results=5&api_key=37RJFXFQ9XM9864U&offset=3&metadata=true
+Last channel Data: http://api.thingspeak.com/channels/73874/feeds/last.json?api_key=37RJFXFQ9XM9864U&offset=3
