@@ -1,4 +1,3 @@
-﻿
 #include <U8glib.h>
 #include "my5x7rus.h"
 #include "terminal.h"
@@ -24,10 +23,19 @@ void draw(void)
 	u8g.setFont(terminal);
 	u8g.setPrintPos(0, 30);
 	u8g.drawStr(0, 22, str);*/
-	u8g.setFont(terminal);
-	u8g.drawStr(0, 15, "\x90\xe3\xe1");
-	u8g.setFont(u8g_font_helvB24n);
-	u8g.drawStr(0, 50, "+25,5");
+	u8g.setFont(my5x7rus);
+	u8g.setPrintPos(0, 20);
+	unsigned char cha[] =  "я";
+	u8g.println(cha[0], HEX);
+	u8g.println(cha[1], HEX);
+	u8g.println(cha[2], HEX);
+	byte b = 'л';
+	u8g.setPrintPos(0, 30);
+	u8g.println(b, HEX);
+    //u8g.drawStr(0, 30, "у");
+	//u8g.drawStr(0, 15, "\x90\xe3\xe1");
+	//u8g.setFont(u8g_font_helvB24n);
+	//u8g.drawStr(0, 50, "+25,5");
 
 }
 
