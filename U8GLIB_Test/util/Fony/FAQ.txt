@@ -1,0 +1,23 @@
+Fony FAQ    2010-01-08 hukka
+============================
+
+Q: When I attempt to use my font, the space characters are too wide or narrow.
+
+A: Try changing the width of glyph 128 to be the same width as the space
+   character (32). It's not yet known if this glitch is due to a bug in Fony's
+   font writing or Windows' font painting.
+
+
+Q: My Fony-created font doesn't display in program X.
+
+A: Most probably a fault in Fony's font generation. Delphi in particular seems
+   to be very fussy about which fonts it accepts. I always try to improve the
+   situation when I can.
+
+
+Q: How can I get more than 256 glyphs/more than 2 colors in my font?
+
+A: You can't. This is a limitation of the FNT format itself. While it's
+   possible to use Fony to edit some other font formats, I don't plan on
+   supporting non-FNT supported features anytime soon.
+
