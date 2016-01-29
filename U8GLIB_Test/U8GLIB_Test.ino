@@ -1,4 +1,4 @@
-#include <U8glib.h>
+﻿#include <U8glib.h>
 #include "my5x7rus.h"
 #include "terminal.h"
 
@@ -46,6 +46,22 @@ void setup(void)
 
     u8g.setColorIndex(1);        
 	u8g.setContrast(255);
+	Serial.begin(9600);
+	char str[] = "эюя";
+	//uint8_t ch = 0x20;
+	
+	int i = 0;
+	while (str[i] != 0)
+	{
+		byte c = str[i];
+		Serial.print(str[i]);		
+		Serial.print("(");		
+		Serial.print(c, HEX);
+		Serial.print(") ");
+		i++;
+	}
+
+	
 }
 
 void loop(void) 
