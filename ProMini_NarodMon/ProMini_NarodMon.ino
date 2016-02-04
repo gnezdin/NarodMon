@@ -4,7 +4,7 @@
 //
 //
 // Для получения отладочных сообщений на SoftSerial - объявить define DEBUG
-// #define DEBUG
+//#define DEBUG
 
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -34,7 +34,7 @@
 #define ESP_REQUEST_TIMEOUT 3000
 
 #define DHTPIN 8 
-#define DHTTYPE DHT21
+#define DHTTYPE DHT22
 
 DHT dht(DHTPIN, DHTTYPE, 4);
 

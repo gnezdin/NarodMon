@@ -1,5 +1,5 @@
 ﻿#include <U8glib.h>
-#include "my5x7rus.h"
+#include "cyrilic_6x10.h"
 #include "terminal.h"
 
 U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE|U8G_I2C_OPT_DEV_0);	// I2C / TWI 
@@ -7,36 +7,20 @@ U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE|U8G_I2C_OPT_DEV_0);	// I2C / TWI
 //U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NO_ACK);	// Display which does not send AC
 
 bool led = false;
+int pageCounter = 0;
 char str[2] = { 0,0 };
-byte code = 100;
+const char* strCap[] = { "ТЕМП. НА УЛИЦЕ", "ТЕМП. В КОМНАТЕ", "ВЛАЖН. В КОМНАТЕ", "АТМ. ДАВЛЕНИЕ"};
+const char* strVal[] = { "-18.5 oC", "+22.3 oC", "56.3 %", "100.3 kPa" };
 
 void draw(void) 
 {
-	/*str[0] = code;
+	u8g.setFont(cyrilic_6x10);
+	u8g.drawStr(15, 10, strCap[pageCounter]);
+	u8g.setFont(u8g_font_fub20);
+	u8g.drawStr(0, 45, strVal[pageCounter]);
 
-	u8g.setFont(my5x7rus);
-	u8g.setPrintPos(0, 8);
-	u8g.print("Code: ");
-	u8g.print(code, DEC);
-	u8g.drawStr(50, 8, str);
-	
-	u8g.setFont(terminal);
-	u8g.setPrintPos(0, 30);
-	u8g.drawStr(0, 22, str);*/
-	u8g.setFont(my5x7rus);
-	u8g.setPrintPos(0, 20);
-	unsigned char cha[] =  "я";
-	u8g.println(cha[0], HEX);
-	u8g.println(cha[1], HEX);
-	u8g.println(cha[2], HEX);
-	byte b = 'л';
-	u8g.setPrintPos(0, 30);
-	u8g.println(b, HEX);
-    //u8g.drawStr(0, 30, "у");
-	//u8g.drawStr(0, 15, "\x90\xe3\xe1");
-	//u8g.setFont(u8g_font_helvB24n);
-	//u8g.drawStr(0, 50, "+25,5");
-
+	u8g.drawHLine(0, 15, 128);
+	//u8g.drawHLine(0, 52, 128);
 }
 
 void setup(void) 
@@ -46,22 +30,7 @@ void setup(void)
 
     u8g.setColorIndex(1);        
 	u8g.setContrast(255);
-	Serial.begin(9600);
-	char str[] = "эюя";
-	//uint8_t ch = 0x20;
-	
-	int i = 0;
-	while (str[i] != 0)
-	{
-		byte c = str[i];
-		Serial.print(str[i]);		
-		Serial.print("(");		
-		Serial.print(c, HEX);
-		Serial.print(") ");
-		i++;
-	}
-
-	
+	u8g.setFontPosBaseline();
 }
 
 void loop(void) 
@@ -82,8 +51,10 @@ void loop(void)
   }
   
   led = !led;
-  code++;
-  if (code > 200) code = 100;
-  delay(1000);
+  
+  pageCounter++;
+  if (pageCounter > 3) pageCounter = 0;
+
+  delay(5000);
 }
 
