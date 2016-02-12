@@ -4,7 +4,7 @@
 //
 //
 // Для получения отладочных сообщений на SoftSerial - объявить define DEBUG
-//#define DEBUG
+#define DEBUG
 
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -25,12 +25,9 @@
 
 // таймауты *10 (мс.)
 #define DHT_COUNTER_TIMEOUT 6000
-  // если отладка включена, то шлём данные на сервера с интервалом 5 мин.
-  #ifdef DEBUG
-  #define SEND_COUNTER_TIMEOUT 30000
-  #else
-  #define SEND_COUNTER_TIMEOUT 60000 // 60000
-  #endif
+ 
+#define SEND_COUNTER_TIMEOUT 60000 // 60000
+   
 #define ESP_REQUEST_TIMEOUT 3000
 
 #define DHTPIN 8 
