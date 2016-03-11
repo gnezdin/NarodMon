@@ -258,6 +258,10 @@ void loop()
 
       if (!root.success())
       {
+	    // очищаем входной буфер
+        memset(jsonIn, 0, sizeof(jsonIn));
+        sw = false;
+        jsonCnt = 0;  
         return;
       }
 
