@@ -339,19 +339,21 @@ void loop()
          softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> !root.success"));
          #endif
         
-		 // очищаем входной Serial буфер
-		 memset(jsonIn, 0, sizeof(jsonIn));
+		     // очищаем входной Serial буфер
+		     memset(jsonIn, 0, sizeof(jsonIn));
          sw = false;
          jsonCnt = 0;
-		 #ifdef DEBUG
+		     
+		     #ifdef DEBUG
          softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> !root.success. CLEAR JSONIN BUFFER"));
          #endif
 		 
-		 //жёстко сбрасываем ESP
-		 digitalWrite(ESP_RESET_PIN, 0);
-		 delay(2000);
-		 digitalWrite(ESP_RESET_PIN, 1);
-		 #ifdef DEBUG
+		     //жёстко сбрасываем ESP
+		     digitalWrite(ESP_RESET_PIN, 0);
+		     delay(2000);
+		     digitalWrite(ESP_RESET_PIN, 1);
+		     
+		     #ifdef DEBUG
          softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> !root.success. ESP HARD RESET"));
          #endif
 		
