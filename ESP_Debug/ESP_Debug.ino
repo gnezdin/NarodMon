@@ -139,7 +139,7 @@ void SendDataPost()
 
     // отправляем запрос на сервер
     client.print("POST /update HTTP/1.1\n"); 
-    client.print("Host: api.thingspeak.com\n"); 
+    client.print("Host: thingspeak.com\n"); 
     client.print("Connection: close\n"); 
     client.print("X-THINGSPEAKAPIKEY: "+tsApiKey+"\n"); 
     client.print("Content-Type: application/x-www-form-urlencoded\n"); 
