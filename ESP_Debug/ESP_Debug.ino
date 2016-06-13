@@ -14,7 +14,7 @@ const char* ssid     = "WdLink"; // название и пароль точки 
 const char* password = "aeroglass";
 
 String tsApiKey = "6EE0PANPMO4FELI6"; 
-const char* tsServer = "thingspeak.com";
+const char* tsServer = "api.thingspeak.com";
 
 // период отправки данных, *100 мс
 #define SEND_TIMEOUT 6000
@@ -60,7 +60,7 @@ void SendDataGet()
     }
     Serial.println("[SEND_COUNTER] Connected to Host");
     // Создаем URI для запроса
-    String url = "/update?key=";
+    String url = "/update?api_key=";
     url += tsApiKey;
     url += "&field1=";
     url += lightSensorValue;
@@ -74,21 +74,30 @@ void SendDataGet()
     client.print(String("GET ") + url + " HTTP/1.1\r\n" +
     "Host: " + tsServer + "\r\n" +
     "Connection: close\r\n\r\n");
-    client.flush(); // ждем отправки всех данных
-    Serial.println("[SEND_COUNTER] Request sended");
-
-    Serial.println("[SEND_COUNTER] Host Answer:");
+     client.flush(); // ждем отправки всех данных
+    
+    unsigned long timeout = millis();
+    while (client.available() == 0) 
+    {
+      if (millis() - timeout > 5000) 
+      {
+        Serial.println("[SEND_COUNTER] Client Answer Timeout !");
+        client.stop();
+        return;
+      }
+    }
+ 
+    Serial.println("[SEND_COUNTER] Host Answer: ");
     // Read all the lines of the reply from server and print them to Serial
     while(client.available())
     {
       String line = client.readStringUntil('\r');
-      //char line = client.read();
       Serial.print(line);
     }
-    
+
     client.stop();
+   // client.flush();
     
-    Serial.println();
     Serial.println("<-[SEND_COUNTER] closing connection");
     Serial.println();
     digitalWrite(LED_GREEN, 0);
