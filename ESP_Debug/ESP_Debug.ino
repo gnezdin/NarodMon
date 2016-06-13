@@ -14,7 +14,7 @@ const char* ssid     = "WdLink"; // название и пароль точки 
 const char* password = "aeroglass";
 
 String tsApiKey = "6EE0PANPMO4FELI6"; 
-const char* tsServer = "api.thingspeak.com";
+const char* tsServer = "thingspeak.com";
 
 // период отправки данных, *100 мс
 #define SEND_TIMEOUT 6000
@@ -217,7 +217,7 @@ void loop()
 
   if (send_counter_timeout >= SEND_TIMEOUT)
   {
-    SendDataPost();
+    SendDataGet();
   }
   
   delay(100);
