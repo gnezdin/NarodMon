@@ -12,7 +12,6 @@ const char* password = "aeroglass";
 const char* deviceMac = "1A:FE:34:FC:B3:44";
 
 const char* host = "narodmon.ru";
-const int httpPort = 8283;
 
 // replace with your channel's thingspeak API key, 
 String tsApiKey = "SBS8SASVY5E921Z6"; 
@@ -163,7 +162,7 @@ bool result = false;
   // подключаемся к серверу   
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
-  const int httpPort = 80;
+  const int httpPort = 8283;
   
   if (!client.connect(host, httpPort)) 
   {   
