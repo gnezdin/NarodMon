@@ -95,59 +95,48 @@ bool SendDataToTS()
       return result;
   }
 
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  const int httpPort = 80;
-  if (!client.connect(tsServer, httpPort)) 
-  {    
-      return result;
-  }
-    
-  // Создаем URI для запроса
-  String url = "/update?api_key=";
-  url += tsApiKey;
-  url += "&field1=";
-  url += TEMP_OUT;
-  url += "&field2=";
-  url += BAT;
-  url += "&field3=";
-  url += TEMP_IN;
-  url += "&field4=";
-  url += HUM;
-  url += "&field5=";
-  url += PRESS;
-  url += "&field6=";
-  url += TEMP_E;
-
-  // отправляем запрос на сервер
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-  "Host: " + tsServer + "\r\n" +
-  "Connection: close\r\n\r\n");
-  client.flush(); // ждем отправки всех данных
-
-  result = true;
-  
-  unsigned long timeout = millis();
-  while (client.available() == 0) 
+  if (!client.connect(tsServer,80)) 
   {
-    if (millis() - timeout > 5000) 
-    {
-      //Serial.println("[SEND_COUNTER] Client Answer Timeout !");
-      client.stop();
-      return result;
-    }
+    return result;
   }
+
+  String postStr = "api_key=" + tsApiKey;
+           postStr +="&field1=";
+           postStr += String(TEMP_OUT);
+           postStr +="&field2=";
+           postStr += String(BAT);
+           postStr +="&field3=";
+           postStr += String(TEMP_IN);
+           postStr +="&field4=";
+           postStr += String(HUM);
+           postStr +="&field5=";
+           postStr += String(PRESS);
+           postStr +="&field6=";
+           postStr += String(TEMP_E);
+           postStr += "\r\n\r\n";
  
-  
-  // Read all the lines of the reply from server and print them to Serial
-  while(client.available())
-  {
-    String line = client.readStringUntil('\r');
-    //Serial.print(line);
-  }
+     client.print("POST /update HTTP/1.1\n"); 
+     client.print("Host: api.thingspeak.com\n"); 
+     client.print("Connection: close\n"); 
+     client.print("X-THINGSPEAKAPIKEY: "+tsApiKey+"\n"); 
+     client.print("Content-Type: application/x-www-form-urlencoded\n"); 
+     client.print("Content-Length: "); 
+     client.print(postStr.length()); 
+     client.print("\n\n"); 
+     client.print(postStr);
 
-  client.stop();  
-  return result;
+     // читаем ответ с и отправляем его в сериал
+//     Serial.print("Requesting: ");  
+//     while(client.available())
+//     {
+//       String line = client.readStringUntil('\r');
+//       Serial.print(line); // хотя это можно убрать
+//     }
+     
+     client.stop();
+     
+     result = true;
+     return result;
 }
 
 bool SendDataToNarodMon()
@@ -159,17 +148,12 @@ bool result = false;
   {
       return result;
   }
-  
-  // подключаемся к серверу   
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  const int httpPort = 80;
-  
+    //  // подключаемся к серверу   
   if (!client.connect(host, httpPort)) 
   {   
      return result;
   }
-
+  
   // отправляем данные   
   // заголовок
   client.print("#");
@@ -196,29 +180,20 @@ bool result = false;
   client.print("#Атмосферное давление");    
   client.println("##");
     
-  client.flush(); // ждем отправки всех данных
-  result = true;
+//  Serial.print("Requesting: ");  
+//  while(client.available())
+//  {
+//    String line = client.readStringUntil('\r');
+//    Serial.print(line); // хотя это можно убрать
+//    if (line.indexOf("OK") >= 0)
+//    {
+//     // NARODMON.STATUS = 1;
+//    }
+//  }
   
-  unsigned long timeout = millis();
-  while (client.available() == 0) 
-  {
-    if (millis() - timeout > 5000) 
-    {
-      //Serial.println("[SEND_COUNTER] Client Answer Timeout !");
-      client.stop();
-      return result;
-    }
-  }
- 
-  
-  // Read all the lines of the reply from server and print them to Serial
-  while(client.available())
-  {
-    String line = client.readStringUntil('\r');
-    //Serial.print(line);
-  }
+  client.stop();
 
-  client.stop();  
+  result = true;
   return result;
 }
 
