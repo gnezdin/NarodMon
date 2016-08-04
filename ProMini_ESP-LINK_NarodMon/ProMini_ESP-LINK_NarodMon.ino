@@ -11,52 +11,42 @@
 #include <RF24.h> // https://github.com/maniacbug/RF24
  
 #include <DHT.h>
-//#include <Wire.h>
 #include <BMP085.h>
-
+#include <Wire.h>
 #include <espduino.h>
 #include <mqtt.h>
+#include <rest.h>
 
 // светодиод статуса
 #define STS_LED_PIN 7
 
-// пин сброса ESP
-#define ESP_RESET_PIN 4 
 
 // таймауты *10 (мс.)
 #define DHT_COUNTER_TIMEOUT 6000
- 
-#define SEND_COUNTER_TIMEOUT 60000 // 60000
+#define SEND_COUNTER_TIMEOUT 6000 // 60000
+// период проверки статуса WiFi у ESP-LINK (* 10 мс)
+#define WIFI_CHECK_TIMEOUT 1000
    
-#define ESP_REQUEST_TIMEOUT 3000
-
-#define DHTPIN 8 
-#define DHTTYPE DHT22
+#define DHT11_PIN 6
 
 // Initialize a connection to esp-link using the normal hardware serial port both for
 // SLIP and for debug messages.
-ESP esp(&Serial, 1);
+ESP esp(&Serial, 5);
 
 // Initialize the MQTT client
 MQTT mqtt(&esp);
 
-//String tsApiKey = "6EE0PANPMO4FELI6";
-//const char* tsServer = "api.thingspeak.com";
+REST rest(&esp);
 
-DHT dht(DHTPIN, DHTTYPE, 4);
+String tsApiKey = "S2CRYTCZOHDR9FQG";
+const char* tsServer = "api.thingspeak.com";
 
-
+dht DHT;
 BMP085 bmp = BMP085();  
 
 const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор передачи, "труба"
 
 RF24 radio(9, 10); // CE, CSN
-
-// организуем софтовый UART
-  #ifdef DEBUG
-  SoftwareSerial softSerial(5, 6); // RX, TX
-  #endif
-
 
 // Температура окр. воздуха 
 double TEMP_OUT = 0;
@@ -71,19 +61,19 @@ double PRESS = 0;
 // Температура электроники (BMP180) 
 double TEMP_E = 0;
 
+// байт состояния датчика DHT
+byte HUMSts = 6;
 
-// переменные от ESP8266
-int WIFI_STATUS = 0;
-int THINGSPEAK_STATUS = 0;
-int NARODMON_STATUS = 0;
+//DEBUG!!!
+int cnt = 0;
 
-// переменная для светодиода 0-выкл, 1-вкл, 2-мигание, 3 - одна вспышка (ошибка TS), 4 - две вспышки (ошибка Narodmon)
+// переменная для светодиода 0-выкл, 1-вкл, 2-мигание, 3 - одна вспышка, 4 - две вспышки
 int  stsLed = 0;
 int stsLedCounter = 0;
 
 // счётчик для чтения данных DHT и BMP (1 раз в минуту)
 long dhtCounter = 0;
-// счётчик отправки на народмон и thingspeak (1 раз в 10 мин)
+// счётчик отправки на thingspeak и по  (1 раз в 10 мин)
 long sendCounter = 0;
 
 // статус Wi-Fi подключения
@@ -91,7 +81,7 @@ bool wifiIsConnected = false;
 // MQTT status
 bool mqtt_connected = false;
 // ThingSpeak timer
-int tsSendCounter = 1;
+int tsSendCounter = 0;
 // счётчик проверки статуса WiFi у ESP-LINK
 int wifiCheckCounter = 0;
 
@@ -116,9 +106,13 @@ const char* const dht_sts[7] PROGMEM = { DHT_OK, DHT_ERROR_CONNECT, DHT_ERROR_TI
 DHT_ERROR_CHECKSUM, DHT_ERROR_ACK_L, DHT_ERROR_ACK_H, DHT_EMPTY };
 
 // константы топиков для подписки/публикации
-const char* TOPIC_HUMIDITY = "/home/bathroom/hum";
-const char* TOPIC_TEMPERATURE = "/home/bathroom/temp";
-const char* TOPIC_HUMIDITY_LL = "/home/bathroom/hum_ll";
+const char* TOPIC_HUMIDITY = "/home/weater_station/hum";
+const char* TOPIC_TEMPERATURE_OUT = "/home/weater_station/temp_out";
+const char* TOPIC_TEMPERATURE_IN = "/home/weater_station/temp_in";
+const char* TOPIC_TEMPERATURE_E = "/home/weater_station/temp_e";
+const char* TOPIC_PRESSURE = "/home/weater_station/pressure";
+const char* TOPIC_RADIO_BAT = "/home/weater_station/radio_bat";
+const char* TOPIC_DHT_STS = "/home/weater_station/dht_sts";
 
 
 
@@ -139,12 +133,13 @@ void wifiCb(void* response)
 			//  mqtt.connect("192.168.100.3", 1883, false);
 			wifiIsConnected = true;
 			mqtt.connect(MQTT_BROKER_HOST, 1883); /*without security ssl*/
+			stsLed = 1;
 		}
 		else 
 		{
 			wifiIsConnected = false;
 			mqtt.disconnect();
-			//debugPort.println("WIFI DISCONNECTED");
+			stsLed = 0;
 		}
 
 	}
@@ -162,7 +157,7 @@ void mqttConnected(void* response)
 	// mqtt.subscribe(TOPIC_FAN);
 	// mqtt.subscribe(TOPIC_LIGHT);
 
-	PublishAllData();
+	//PublishAllData();
 }
 void mqttDisconnected(void* response)
 {
@@ -253,14 +248,14 @@ void mqttPublished(void* response)
 }
 
 // Передача всех данных по MQTT
-void PublishAllData()
-{
-	if ((!mqttConnected) | (!wifiIsConnected)) return;
+//void PublishAllData()
+//{
+//	if ((!mqttConnected) | (!wifiIsConnected)) return;
+//
+//	 char buf[10];
 
-	// char buf[5];
-
-	// itoa(HU, buf, 10);
-	// mqtt.publish(TOPIC_HUMIDITY, buf, 0, 1);
+	//itoa(HU, buf, 10);
+	//mqtt.publish(TOPIC_HUMIDITY, buf, 0, 1);
 	// itoa(TE, buf, 10);
 	// mqtt.publish(TOPIC_TEMPERATURE, buf, 0, 1);
 	// itoa(LL, buf, 10);
@@ -277,115 +272,117 @@ void PublishAllData()
 	// char buf1[20];
 	// strcpy_P(buf1, (char*)pgm_read_word(&(dht_sts[DH])));
 	// mqtt.publish(TOPIC_HUMIDITY_SENSOR_STATUS, buf1, 0, 1);
-}
+//}
 
 // Передача одного параметра по MQTT PublishOneData(const char * mqtt_topic_name)
 void PublishOneData(const char* mqtt_topic_name)
 {
+	//Serial.println("PublishOneData");
 	if ((!mqttConnected) | (!wifiIsConnected)) return;
 
-	// char buf[5];
-	// String topicName = String(mqtt_topic_name);
-	// if (topicName.compareTo(TOPIC_HUMIDITY) == 0)
-	// {
-		// itoa(HU, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_TEMPERATURE) == 0)
-	// {
-		// itoa(TE, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_HUMIDITY_LL) == 0)
-	// {
-		// itoa(LL, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_HUMIDITY_HH) == 0)
-	// {
-		// itoa(HH, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_LIGHT) == 0)
-	// {
-		// itoa(LI, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_CONTROL_MODE) == 0)
-	// {
-		// itoa(CM, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_FAN) == 0)
-	// {
-		// itoa(FO, buf, 10);
-		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
-	// }
-	// else if (topicName.compareTo(TOPIC_HUMIDITY_SENSOR_STATUS) == 0)
-	// {
-		// char buf1[20];
-		// strcpy_P(buf1, (char*)pgm_read_word(&(dht_sts[DH])));
-		// mqtt.publish(TOPIC_HUMIDITY_SENSOR_STATUS, buf1, 0, 1);
-	// }
+	char val[20] = "";
+
+	 String topicName = String(mqtt_topic_name);
+	// Serial.print("topic: ");
+	// Serial.println(topicName);
+	 
+	 if (topicName.compareTo(TOPIC_HUMIDITY) == 0)
+	 {
+		// Serial.println("TOPIC_HUMIDITY");
+		 dtostrf(HUM, 1, 1, val);
+		// Serial.print("Hum: ");
+		// Serial.println(val);
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 
+	 }
+	 else if (topicName.compareTo(TOPIC_TEMPERATURE_OUT) == 0)
+	 {
+		 dtostrf(TEMP_OUT, 1, 1, val);
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+	 }
+	 else if (topicName.compareTo(TOPIC_TEMPERATURE_IN) == 0)
+	 {
+		 dtostrf(TEMP_IN, 1, 1, val);
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+	 }
+	 else if (topicName.compareTo(TOPIC_TEMPERATURE_E) == 0)
+	 {
+		 dtostrf(TEMP_E, 1, 1, val);
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+	 }
+	 else if (topicName.compareTo(TOPIC_PRESSURE) == 0)
+	 {
+		 dtostrf(PRESS, 1, 1, val);
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+	 }
+	 else if (topicName.compareTo(TOPIC_RADIO_BAT) == 0)
+	 {
+		 dtostrf(BAT, 1, 1, val);
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+	 }
+	 else if (topicName.compareTo(TOPIC_DHT_STS) == 0)
+	 {
+		 strcpy_P(val, (char*)pgm_read_word(&(dht_sts[HUMSts])));
+		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+	 }
 }
 
 void ReadDHT()
 {
+	//Serial.println("ReadDHT()");
+	// DEBUG !!!
+	cnt++;
+	HUM = (double) cnt;
+	PublishOneData(TOPIC_HUMIDITY);
+
 		// READ DATA
-	byte newDH = 0;
+	byte newHUMSts = 0;
   	int chk = DHT.read11(DHT11_PIN);
   	switch (chk)
   	{
 	  	case DHTLIB_OK:
-	  	 newDH = 0;
+	  	 newHUMSts = 0;
 	  	break;
 	  	case DHTLIB_ERROR_CONNECT:
-	  	 newDH = 1;
+	  	 newHUMSts = 1;
 	  	break;
 	  	case DHTLIB_ERROR_TIMEOUT:
-	  	 newDH = 2;
+	  	 newHUMSts = 2;
 	  	break;	
 		  case DHTLIB_ERROR_CHECKSUM:
-	  	 newDH = 3;
+	  	 newHUMSts = 3;
 	  	break;
 	  	case DHTLIB_ERROR_ACK_L:
-	  	 newDH = 4;
+	  	 newHUMSts = 4;
 	  	break;
 	  	case DHTLIB_ERROR_ACK_H:
-	  	 newDH = 5;
+	  	 newHUMSts = 5;
 	  	break;
 	  	default:
-	  	 newDH = 6;
+	  	 newHUMSts = 6;
 	  	break;
   	}
 
-	if (newDH != DH)
+	if (newHUMSts != HUMSts)
 	{
-		DH = newDH;
-		PublishOneData(TOPIC_HUMIDITY_SENSOR_STATUS);
+		HUMSts = newHUMSts;
+		PublishOneData(TOPIC_DHT_STS);
 	}
 
-  	if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 10) & (DHT.temperature < 90))
+  	if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 0) & (DHT.temperature < 90))
 	{
-		  byte newHU = round(DHT.humidity);
-		  byte newTE = round(DHT.temperature);
+		  HUM = DHT.humidity;
+		  TEMP_IN = DHT.temperature;
 
 		  // Publish MQTT
-		  if (newHU != HU)
-		  {
-			  HU = newHU;
-			  PublishOneData(TOPIC_HUMIDITY);
-		  }
-		  if (newTE != TE)
-		  {
-			  TE = newTE;
-			  PublishOneData(TOPIC_TEMPERATURE);
-		  } 
+		  PublishOneData(TOPIC_HUMIDITY);		
+		  PublishOneData(TOPIC_TEMPERATURE_IN);	 
 	}
 }
 
 void ReadBMP()
 {
+	//Serial.println("ReadBMP()");
   long pres = 0; //bmp.readPressure();
   bmp.getPressure(&pres);
   long temp = 0;
@@ -395,11 +392,41 @@ void ReadBMP()
 
   PRESS = (double) pres / 1000.0;
   TEMP_E = tmp * 0.1;
+
+  PublishOneData(TOPIC_PRESSURE);
+  PublishOneData(TOPIC_TEMPERATURE_E);
 }
 
 void SendDataToESP()
 {
-  //
+	if (!rest.begin(tsServer))
+	{
+		stsLed = 2;
+		return;
+	}
+
+	char response[266];
+	if (wifiIsConnected) 
+	{
+		
+			char buff[64];
+			char str_hum[20];
+			dtostrf(HUM, 1, 1, str_hum);
+			sprintf(buff, "/update?api_key=6EE0PANPMO4FELI6&field1=%s", str_hum);
+			
+			rest.get((const char*)buff);
+			
+
+			if (!rest.getResponse(response, 266) == HTTP_STATUS_OK) 
+			{
+				stsLed = 3;
+			} 
+			else
+			{
+				stsLed = 1;
+			}
+	}
+
 }
 
 void setup() 
@@ -428,17 +455,11 @@ void setup()
   while (!esp.ready());
 
   //debugPort.println("ARDUINO: setup mqtt client");
-  if (!mqtt.begin("BathroomController", "", "", 120, 1))
+  if (!mqtt.begin("Weater_Station", "", "", 120, 1))
   {
-	  //debugPort.println("ARDUINO: fail to setup mqtt");
-	  //digitalWrite(13, 1);
-	  //while (1);
 	  return;
   }
 
-
-  //debugPort.println("ARDUINO: setup mqtt lwt");
-  //mqtt.lwt("/lwt", "offline", 0, 0); //or mqtt.lwt("/lwt", "offline");
 
   /*setup mqtt events */
   mqtt.connectedCb.attach(&mqttConnected);
@@ -626,6 +647,9 @@ void loop()
       BAT = (double) lng.l / 1000.0 ; //mV -> V
     }
 
+	PublishOneData(TOPIC_TEMPERATURE_OUT);
+	PublishOneData(TOPIC_RADIO_BAT);
+
 }
 
  // считываем DHT
@@ -635,7 +659,9 @@ void loop()
  {
     dhtCounter = 0;
     ReadDHT();
-    ReadBMP();
+  //  ReadBMP();
+
+
  }
 
  
