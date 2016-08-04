@@ -1,21 +1,21 @@
-//Код для передатчика ProMini Narodmon, ThingSpeak
+// Код для передатчика ProMini Narodmon, ThingSpeak v.2.0
 //
-//
-//
+// Контроллер ProMini подключен к ESP8266 с прошивкой esp-link v. 2.1 b2
+// Передача всех параметров и удалённое управление реализовано через MQTT посредством esp-link
 //
 // Для получения отладочных сообщений на SoftSerial - объявить define DEBUG
-#define DEBUG
+//#define DEBUG
 
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h> // https://github.com/maniacbug/RF24
-  #ifdef DEBUG
-  #include <SoftwareSerial.h>
-  #endif
-#include <ArduinoJson.h>
+ 
 #include <DHT.h>
-#include <Wire.h>
+//#include <Wire.h>
 #include <BMP085.h>
+
+#include <espduino.h>
+#include <mqtt.h>
 
 // светодиод статуса
 #define STS_LED_PIN 7
@@ -33,6 +33,16 @@
 #define DHTPIN 8 
 #define DHTTYPE DHT22
 
+// Initialize a connection to esp-link using the normal hardware serial port both for
+// SLIP and for debug messages.
+ESP esp(&Serial, 1);
+
+// Initialize the MQTT client
+MQTT mqtt(&esp);
+
+//String tsApiKey = "6EE0PANPMO4FELI6";
+//const char* tsServer = "api.thingspeak.com";
+
 DHT dht(DHTPIN, DHTTYPE, 4);
 
 
@@ -47,17 +57,6 @@ RF24 radio(9, 10); // CE, CSN
   SoftwareSerial softSerial(5, 6); // RX, TX
   #endif
 
-// очередной принятый по UART байт
-byte incommingByte = 0;
-
-// счётчик байтов входного буфера Json
-byte jsonCnt = 0;
-
-// флаг приёма окончания запроса Json
-bool sw = false;
-
-// таймер ожидания ответа от ESP и флаг
-long espCounter = 0;
 
 // Температура окр. воздуха 
 double TEMP_OUT = 0;
@@ -87,139 +86,325 @@ long dhtCounter = 0;
 // счётчик отправки на народмон и thingspeak (1 раз в 10 мин)
 long sendCounter = 0;
 
-char jsonIn[100];
+// статус Wi-Fi подключения
+bool wifiIsConnected = false;
+// MQTT status
+bool mqtt_connected = false;
+// ThingSpeak timer
+int tsSendCounter = 1;
+// счётчик проверки статуса WiFi у ESP-LINK
+int wifiCheckCounter = 0;
 
-// Переменные, создаваемые процессом сборки,
-// когда компилируется скетч
-extern int __bss_end;
-extern void *__brkval;
+// WiFi AP Data
+const char* WIFI_SSID = "WdLink";
+const char* WIFI_PASSWORD = "aeroglass";
 
-// Функция, возвращающая количество свободного ОЗУ (RAM)
-int memoryFree()
+// MQTT Broker Data
+const char* MQTT_BROKER_HOST = "192.168.100.11";
+
+// константы DHT STATUS
+
+const char DHT_OK[] PROGMEM = "OK";
+const char DHT_ERROR_CONNECT[] PROGMEM = "ERROR_CONNECT";
+const char DHT_ERROR_TIMEOUT[] PROGMEM = "ERROR_TIMEOUT";
+const char DHT_ERROR_CHECKSUM[] PROGMEM = "ERROR_CHECKSUM";
+const char DHT_ERROR_ACK_L[] PROGMEM = "ERROR_ACK_L";
+const char DHT_ERROR_ACK_H[] PROGMEM = "ERROR_ACK_H";
+const char DHT_EMPTY[] PROGMEM = "";
+
+const char* const dht_sts[7] PROGMEM = { DHT_OK, DHT_ERROR_CONNECT, DHT_ERROR_TIMEOUT,
+DHT_ERROR_CHECKSUM, DHT_ERROR_ACK_L, DHT_ERROR_ACK_H, DHT_EMPTY };
+
+// константы топиков для подписки/публикации
+const char* TOPIC_HUMIDITY = "/home/bathroom/hum";
+const char* TOPIC_TEMPERATURE = "/home/bathroom/temp";
+const char* TOPIC_HUMIDITY_LL = "/home/bathroom/hum_ll";
+
+
+
+// MQTT FUNCTIONS
+
+// Callback made from esp-link to notify of wifi status changes
+// Here we just print something out for grins
+void wifiCb(void* response)
 {
-   int freeValue;
-   if((int)__brkval == 0)
-      freeValue = ((int)&freeValue) - ((int)&__bss_end);
-   else
-      freeValue = ((int)&freeValue) - ((int)__brkval);
-   return freeValue;
+	uint32_t status;
+	RESPONSE res(response);
+
+	if (res.getArgc() == 1) 
+	{
+		res.popArgs((uint8_t*)&status, 4);
+		if (status == STATION_GOT_IP) {
+			//debugPort.println("WIFI CONNECTED");
+			//  mqtt.connect("192.168.100.3", 1883, false);
+			wifiIsConnected = true;
+			mqtt.connect(MQTT_BROKER_HOST, 1883); /*without security ssl*/
+		}
+		else 
+		{
+			wifiIsConnected = false;
+			mqtt.disconnect();
+			//debugPort.println("WIFI DISCONNECTED");
+		}
+
+	}
+}
+
+// Callback when MQTT is connected
+void mqttConnected(void* response)
+{
+	mqtt_connected = true;
+	//debugPort.println("MQTT CONNECTED");
+	
+	// mqtt.subscribe(TOPIC_HUMIDITY_HH);
+	// mqtt.subscribe(TOPIC_HUMIDITY_LL);
+	// mqtt.subscribe(TOPIC_CONTROL_MODE);
+	// mqtt.subscribe(TOPIC_FAN);
+	// mqtt.subscribe(TOPIC_LIGHT);
+
+	PublishAllData();
+}
+void mqttDisconnected(void* response)
+{
+	mqtt_connected = false;
+	//debugPort.println("MQTT DISCONNECTED");
+}
+
+// Callback when an MQTT message arrives for one of our subscriptions
+void mqttData(void* response) 
+{
+	RESPONSE res(response);
+
+	//Serial.print(F("Received: topic="));
+	String topic = res.popString();
+	//Serial.println(topic);
+
+	//Serial.print(F("data="));
+	String data = res.popString();
+	//Serial.println(data);
+
+	//byte val = 0;
+	
+	// Анализ входных данных и сохранение в EEPROM
+	// if (topic.compareTo(TOPIC_HUMIDITY_LL) == 0)
+	// {
+		// val = (byte) data.toInt();
+		// if ((val <= 100) & (val >= 0) & (LL != val))
+		// {
+			// LL = val;
+			// EEPROM_write_byte(1, LL);
+		// }
+	// }
+	// else if (topic.compareTo(TOPIC_HUMIDITY_HH) == 0)
+	// {
+		// val = (byte)data.toInt();
+		// if ((val <= 100) & (val >= 0) & (HH != val))
+		// {
+			// HH = val;
+			// EEPROM_write_byte(2, HH);
+		// }
+	// }
+	// else if (topic.compareTo(TOPIC_LIGHT) == 0)
+	// {
+		// val = (byte)data.toInt();
+		// if ((val < 2) & (val >= 0) & (LI != val))
+		// {
+			// LI = val;
+			// digitalWrite(LIGHT, LI);
+		// }
+	// }
+	// else if (topic.compareTo(TOPIC_CONTROL_MODE) == 0)
+	// {
+		// val = (byte)data.toInt();
+		// if ((val < 2) & (val >= 0) & (CM != val))
+		// {
+			// CM = val;
+			//EEPROM_write_byte(3, CM);
+		// }
+	// }
+	// else if (topic.compareTo(TOPIC_FAN) == 0)
+	// {
+		// val = (byte)data.toInt();
+		// if ((val < 2) & (val >= 0) & (FO != val))
+		// {
+			// FO = val;
+			//если пришла команда извне на включение вентилятора, то переводим режим работы в "РУЧ." и публикуем изменение режима в MQTT
+			// if ((FO == 1) & (CM == 1))
+			// {
+				// CM = 0;
+				// PublishOneData(TOPIC_CONTROL_MODE);
+			// }
+			//если пришла команда извне на выключение вентилятора, то переводим режим работы в "АВТ." и публикуем изменение режима в MQTT
+			// else if ((FO == 0) & (CM == 0))
+			// {
+				// CM = 1;
+				// PublishOneData(TOPIC_CONTROL_MODE);
+			// }
+			//применяем полученную команду к вентилятору
+			// digitalWrite(FAN, FO);
+			// PublishOneData(TOPIC_FAN);
+		// }
+	// }
+}
+
+void mqttPublished(void* response)
+{
+	//debugPort.print("MQTT PUBLISHED");
+}
+
+// Передача всех данных по MQTT
+void PublishAllData()
+{
+	if ((!mqttConnected) | (!wifiIsConnected)) return;
+
+	// char buf[5];
+
+	// itoa(HU, buf, 10);
+	// mqtt.publish(TOPIC_HUMIDITY, buf, 0, 1);
+	// itoa(TE, buf, 10);
+	// mqtt.publish(TOPIC_TEMPERATURE, buf, 0, 1);
+	// itoa(LL, buf, 10);
+	// mqtt.publish(TOPIC_HUMIDITY_LL, buf, 0, 1);
+	// itoa(HH, buf, 10);
+	// mqtt.publish(TOPIC_HUMIDITY_HH, buf, 0, 1);
+	// itoa(LI, buf, 10);
+	// mqtt.publish(TOPIC_LIGHT, buf, 0, 1);
+	// itoa(CM, buf, 10);
+	// mqtt.publish(TOPIC_CONTROL_MODE, buf, 0, 1);
+	// itoa(FO, buf, 10);
+	// mqtt.publish(TOPIC_FAN, buf, 0, 1);
+	
+	// char buf1[20];
+	// strcpy_P(buf1, (char*)pgm_read_word(&(dht_sts[DH])));
+	// mqtt.publish(TOPIC_HUMIDITY_SENSOR_STATUS, buf1, 0, 1);
+}
+
+// Передача одного параметра по MQTT PublishOneData(const char * mqtt_topic_name)
+void PublishOneData(const char* mqtt_topic_name)
+{
+	if ((!mqttConnected) | (!wifiIsConnected)) return;
+
+	// char buf[5];
+	// String topicName = String(mqtt_topic_name);
+	// if (topicName.compareTo(TOPIC_HUMIDITY) == 0)
+	// {
+		// itoa(HU, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_TEMPERATURE) == 0)
+	// {
+		// itoa(TE, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_HUMIDITY_LL) == 0)
+	// {
+		// itoa(LL, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_HUMIDITY_HH) == 0)
+	// {
+		// itoa(HH, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_LIGHT) == 0)
+	// {
+		// itoa(LI, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_CONTROL_MODE) == 0)
+	// {
+		// itoa(CM, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_FAN) == 0)
+	// {
+		// itoa(FO, buf, 10);
+		// mqtt.publish(mqtt_topic_name, buf, 0, 1);
+	// }
+	// else if (topicName.compareTo(TOPIC_HUMIDITY_SENSOR_STATUS) == 0)
+	// {
+		// char buf1[20];
+		// strcpy_P(buf1, (char*)pgm_read_word(&(dht_sts[DH])));
+		// mqtt.publish(TOPIC_HUMIDITY_SENSOR_STATUS, buf1, 0, 1);
+	// }
 }
 
 void ReadDHT()
 {
-  #ifdef DEBUG
-  softSerial.print(F("[-> ReadDHT] "));
-  softSerial.print(F("Memory Free: "));
-  softSerial.println(memoryFree());
-  #endif
-      
-  // READ DATA
-  float h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();   
-    
-  #ifdef DEBUG
-  softSerial.print(F("[ReadDHT] h: "));
-  softSerial.print(h);
-  softSerial.print(F("; t: "));
-  softSerial.println(t);
-  #endif
+		// READ DATA
+	byte newDH = 0;
+  	int chk = DHT.read11(DHT11_PIN);
+  	switch (chk)
+  	{
+	  	case DHTLIB_OK:
+	  	 newDH = 0;
+	  	break;
+	  	case DHTLIB_ERROR_CONNECT:
+	  	 newDH = 1;
+	  	break;
+	  	case DHTLIB_ERROR_TIMEOUT:
+	  	 newDH = 2;
+	  	break;	
+		  case DHTLIB_ERROR_CHECKSUM:
+	  	 newDH = 3;
+	  	break;
+	  	case DHTLIB_ERROR_ACK_L:
+	  	 newDH = 4;
+	  	break;
+	  	case DHTLIB_ERROR_ACK_H:
+	  	 newDH = 5;
+	  	break;
+	  	default:
+	  	 newDH = 6;
+	  	break;
+  	}
 
-  if (isnan(h) || isnan(t)) 
-  {
-    #ifdef DEBUG
-    softSerial.println(F("[ReadDHT] isnan(h) | isnan(t)"));
-    #endif
-    return;
-  }
+	if (newDH != DH)
+	{
+		DH = newDH;
+		PublishOneData(TOPIC_HUMIDITY_SENSOR_STATUS);
+	}
 
-    HUM = h;
-    TEMP_IN = t;
+  	if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 10) & (DHT.temperature < 90))
+	{
+		  byte newHU = round(DHT.humidity);
+		  byte newTE = round(DHT.temperature);
+
+		  // Publish MQTT
+		  if (newHU != HU)
+		  {
+			  HU = newHU;
+			  PublishOneData(TOPIC_HUMIDITY);
+		  }
+		  if (newTE != TE)
+		  {
+			  TE = newTE;
+			  PublishOneData(TOPIC_TEMPERATURE);
+		  } 
+	}
 }
 
 void ReadBMP()
 {
-  #ifdef DEBUG
-  softSerial.print(F("[-> ReadBMP] "));
-  softSerial.print(F("Memory Free: "));
-  softSerial.println(memoryFree());
-  #endif
   long pres = 0; //bmp.readPressure();
   bmp.getPressure(&pres);
   long temp = 0;
   bmp.getTemperature(&temp);
 
-  #ifdef DEBUG
-  softSerial.print(F("[ReadBMP] pres: "));
-  softSerial.print(pres);
-  softSerial.print(F("; temp: "));
-  softSerial.println(temp);
-  #endif
-  
   float tmp = temp;
 
   PRESS = (double) pres / 1000.0;
   TEMP_E = tmp * 0.1;
-
-  #ifdef DEBUG
-  softSerial.print(F("[ReadBMP] PRESS: "));
-  softSerial.print(PRESS);
-  softSerial.print(F("; TEMP_E: "));
-  softSerial.println(TEMP_E);
-  #endif
 }
 
 void SendDataToESP()
 {
-  #ifdef DEBUG
-  softSerial.print(F("[-> SendDataToESP] "));
-  softSerial.print(F("Memory Free: "));
-  softSerial.println(memoryFree());
-  #endif
-  StaticJsonBuffer<200> jsonBuffer;
- 
-  JsonObject& root = jsonBuffer.createObject();
-  root["temp_out"] = TEMP_OUT;
-  root["bat"] = BAT;
-  root["temp_in"] = TEMP_IN;
-  root["hum"] = HUM;
-  root["press"] = PRESS;
-  root["temp_e"] = TEMP_E;
- 
-  root.printTo(Serial);
-  
-  #ifdef DEBUG
-  softSerial.print(F("[SendDataToESP] JSON: "));
-  root.printTo(softSerial);
-  softSerial.println();
-  softSerial.println(F("[<- SendDataToESP] "));
-  #endif
+  //
 }
 
 void setup() 
 {
-  memset(jsonIn, 0, sizeof(jsonIn));
-
-  Serial.begin(9600);
-  
-  #ifdef DEBUG
-  softSerial.begin(9600);
-  #endif
-  
-  delay(1000);
-
-  #ifdef DEBUG
-  softSerial.print(F("[-> Setup] "));
-  softSerial.print(F("Memory Free: "));
-  softSerial.println(memoryFree());
-  #endif
-  
-  pinMode(ESP_RESET_PIN, OUTPUT);
-  digitalWrite(ESP_RESET_PIN, 1);
-
-  #ifdef DEBUG
-  softSerial.println(F("[Setup] ESP_RESET_PIN set to 1"));
-  #endif
+  Serial.begin(57600);
   
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
@@ -235,219 +420,99 @@ void setup()
   radio.openReadingPipe(1, pipe); // открываем первую трубу с индитификатором "pipe"
   radio.startListening(); // включаем приемник, начинаем слушать трубу
 
-  #ifdef DEBUG
-  softSerial.println(F("[Setup] NRF Init"));
-  #endif
+  // ESP INIT
+  esp.enable();
+  delay(500);
+  esp.reset();
+  delay(500);
+  while (!esp.ready());
 
-  dht.begin();
-  bmp.init();   
+  //debugPort.println("ARDUINO: setup mqtt client");
+  if (!mqtt.begin("BathroomController", "", "", 120, 1))
+  {
+	  //debugPort.println("ARDUINO: fail to setup mqtt");
+	  //digitalWrite(13, 1);
+	  //while (1);
+	  return;
+  }
 
-  #ifdef DEBUG
-  softSerial.println(F("[Setup] dht & bmp init"));
-  softSerial.println(F("[Setup] Print variables & constants:"));
-  softSerial.print(F("[Setup] SEND_COUNTER_TIMEOUT: "));
-  softSerial.println(SEND_COUNTER_TIMEOUT);
-  softSerial.print(F("[Setup] DHT_COUNTER_TIMEOUT: "));
-  softSerial.println(DHT_COUNTER_TIMEOUT);
-  softSerial.print(F("[Setup] stsLed: "));
-  softSerial.println(stsLed);
-  softSerial.println(F("[<- Setup] "));
-  #endif
+
+  //debugPort.println("ARDUINO: setup mqtt lwt");
+  //mqtt.lwt("/lwt", "offline", 0, 0); //or mqtt.lwt("/lwt", "offline");
+
+  /*setup mqtt events */
+  mqtt.connectedCb.attach(&mqttConnected);
+  mqtt.disconnectedCb.attach(&mqttDisconnected);
+  mqtt.publishedCb.attach(&mqttPublished);
+  mqtt.dataCb.attach(&mqttData);
+
+  /*setup wifi*/
+  //debugPort.println("ARDUINO: setup wifi");
+  esp.wifiCb.attach(&wifiCb);
+
+  esp.wifiConnect(WIFI_SSID, WIFI_PASSWORD);
 }
 
 void loop() 
 {
-   // считываем очередной байт, если он есть в буфере
-  if (Serial.available())
-  {
-     incommingByte = Serial.read();
-   
-   switch(incommingByte)
-   {
-     case '{':  //Проверяем признак начала строки JSON
-       // очищаем буфер и готовимся к приёму комманды
-       memset(jsonIn, 0, sizeof(jsonIn));
-       sw = false;
-       jsonCnt = 0;
-       sw = false;
-       jsonIn[jsonCnt] = (char) incommingByte;
-       jsonCnt++;
-       break;  
-     case '}':  //Проверяем признак конца команды
-        sw = true;
-        jsonIn[jsonCnt] = (char) incommingByte;
-        jsonCnt++;
-        break;
-     default:
-       sw = false;
-       if (jsonCnt > 0)
-       {
-          jsonIn[jsonCnt] = (char) incommingByte;
-          jsonCnt++;
-       }
-       
-       // если данных пришло больше, чем размер буфера, то всё очищаем
-       if (jsonCnt > sizeof(jsonIn))
-       {
-          memset(jsonIn, 0, sizeof(jsonIn));
-          sw = false;
-          jsonCnt = 0;
-       }
-         break;
-   }
-  }
-  // анализируем входящие данные JSON
-  if (sw)
-  {
-      #ifdef DEBUG
-      softSerial.print(F("[-> loop. sw == true] "));
-      softSerial.print(F("Memory Free: "));
-      softSerial.println(memoryFree());
-      softSerial.print(F("[loop. sw == true] jsonIn: "));
-      softSerial.println(jsonIn);
-      #endif
-      // сброс счётчика ожидания ответа ESP
-      if (espCounter > 0)
-      {
-         // если счётчик меньше 100, то на ESP уже пошёл RESET, поэтому снимаем RESET -> 1
-         if (espCounter <= 100)
-         {
-            digitalWrite(ESP_RESET_PIN, 1);
+   esp.process();
 
-            #ifdef DEBUG
-            softSerial.print(F("[loop. sw == true] (espCounter <= 100); espCounter: "));
-            softSerial.println(espCounter);
-            softSerial.println(F("[loop. sw == true] ESP_RESET_PIN set to 1"));
-            #endif
-         }
-         
-         espCounter = 0;
-
-         #ifdef DEBUG
-         softSerial.print(F("[loop. sw == true] (espCounter > 0); espCounter: "));
-         softSerial.println(espCounter);
-         softSerial.println(F("[loop. sw == true] espCounter set to 0"));
-         #endif
-      }
-      
-      StaticJsonBuffer<200> jsonBuffer;
-      JsonObject& root = jsonBuffer.parseObject(jsonIn);
-
-      if (!root.success())
-      {
-         #ifdef DEBUG
-         softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> !root.success"));
-         #endif
-        
-		     // очищаем входной Serial буфер
-		     memset(jsonIn, 0, sizeof(jsonIn));
-         sw = false;
-         jsonCnt = 0;
-		     
-		     #ifdef DEBUG
-         softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> !root.success. CLEAR JSONIN BUFFER"));
-         #endif
-		 
-		     //жёстко сбрасываем ESP
-		     digitalWrite(ESP_RESET_PIN, 0);
-		     delay(2000);
-		     digitalWrite(ESP_RESET_PIN, 1);
-		     
-		     #ifdef DEBUG
-         softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> !root.success. ESP HARD RESET"));
-         #endif
+	// Проверка статуса WiFi
+	wifiCheckCounter++;
+	if (wifiCheckCounter >= WIFI_CHECK_TIMEOUT)
+	{
+		wifiCheckCounter = 0;
 		
-         return;
-      }
-
-      #ifdef DEBUG
-      softSerial.println(F("[loop. sw == true] jsonBuffer.parseObject -> root.success"));
-      #endif
-
-      if (root.containsKey("wifi_status"))
-      {
-         WIFI_STATUS = root["wifi_status"];
-      }
-
-       if (root.containsKey("thingspeak_status"))
-      {
-         THINGSPEAK_STATUS = root["thingspeak_status"];
-      }
-
-       if (root.containsKey("narodmon_status"))
-      {
-         NARODMON_STATUS = root["narodmon_status"];
-      }
-
-      #ifdef DEBUG
-      softSerial.print(F("[loop. sw == true] variables after json parse: "));
-      softSerial.print(F("Memory Free: "));
-      softSerial.println(memoryFree());
-      softSerial.print(F("[loop. sw == true] WIFI_STATUS: "));
-      softSerial.println(WIFI_STATUS);
-      softSerial.print(F("[loop. sw == true] THINGSPEAK_STATUS: "));
-      softSerial.println(THINGSPEAK_STATUS);
-      softSerial.print(F("[loop. sw == true] NARODMON_STATUS: "));
-      softSerial.println(NARODMON_STATUS);
-      #endif
-      
-      // очищаем входной буфер
-      memset(jsonIn, 0, sizeof(jsonIn));
-      sw = false;
-      jsonCnt = 0;    
-
-      #ifdef DEBUG
-      softSerial.println(F("[loop. sw == true] Clear jsonIn Buffer; sw set to false; jsonCnt set to 0"));
-      softSerial.println(F("[loop. sw == true] stsLed calculating"));
-      #endif
-       
+		if (!wifiIsConnected)
+		{
+			esp.wifiConnect(WIFI_SSID, WIFI_PASSWORD);
+		}
+	}
+   
       // отображаем статус на LED
-      if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (NARODMON_STATUS))
-      {
-        stsLed = 1;
+      // if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (NARODMON_STATUS))
+      // {
+        // stsLed = 1;
 
-        #ifdef DEBUG
-        softSerial.println(F("[loop. sw == true] stsLed set to 1"));
-        #endif
-      }
-       else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (!NARODMON_STATUS))
-       {
-          stsLed = 2;
+        // #ifdef DEBUG
+        // softSerial.println(F("[loop. sw == true] stsLed set to 1"));
+        // #endif
+      // }
+       // else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (!NARODMON_STATUS))
+       // {
+          // stsLed = 2;
 
-          #ifdef DEBUG
-          softSerial.println(F("[loop. sw == true] stsLed set to 2"));
-          #endif
-       }
-       else if (!WIFI_STATUS)
-       {
-          stsLed = 0;
+          // #ifdef DEBUG
+          // softSerial.println(F("[loop. sw == true] stsLed set to 2"));
+          // #endif
+       // }
+       // else if (!WIFI_STATUS)
+       // {
+          // stsLed = 0;
 
-          #ifdef DEBUG
-          softSerial.println(F("[loop. sw == true] stsLed set to 0"));
-          #endif
-       }
-        else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (NARODMON_STATUS))
-        {
-           stsLed = 3;
+          // #ifdef DEBUG
+          // softSerial.println(F("[loop. sw == true] stsLed set to 0"));
+          // #endif
+       // }
+        // else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (NARODMON_STATUS))
+        // {
+           // stsLed = 3;
 
-           #ifdef DEBUG
-           softSerial.println(F("[loop. sw == true] stsLed set to 3"));
-           #endif
-        }
-        else if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (!NARODMON_STATUS))
-        {
-           stsLed = 4;
+           // #ifdef DEBUG
+           // softSerial.println(F("[loop. sw == true] stsLed set to 3"));
+           // #endif
+        // }
+        // else if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (!NARODMON_STATUS))
+        // {
+           // stsLed = 4;
 
-           #ifdef DEBUG
-           softSerial.println(F("[loop. sw == true] stsLed set to 4"));
-           #endif
-        }
+           // #ifdef DEBUG
+           // softSerial.println(F("[loop. sw == true] stsLed set to 4"));
+           // #endif
+        // }
 
-   #ifdef DEBUG
-   softSerial.println(F("[<- loop. sw == true] "));
-   #endif
-           
-  }  
+ 
+  
   // Update StatusLed
   switch(stsLed)
   {
@@ -513,13 +578,7 @@ void loop()
 
   // Считываем NRF
   if (radio.available())
-  {
-    #ifdef DEBUG
-    softSerial.print(F("[-> loop. NRF data available] "));
-    softSerial.print(F("Memory Free: "));
-    softSerial.println(memoryFree());
-    #endif
-           
+  {        
     byte data[8];
     union
     {
@@ -536,19 +595,6 @@ void loop()
     // читаем данные и указываем сколько байт читать
     bool done = radio.read(&data, sizeof(data));
 
-    #ifdef DEBUG
-    softSerial.print(F("[loop. NRF data available] done: "));
-    softSerial.println(done);
-    softSerial.print(F("[loop. NRF data available] data: "));
-    for(int it = 0; it < 8; it++)
-    {
-       softSerial.print(data[it], HEX);
-       softSerial.print(", ");
-    }
-    softSerial.println();
-    #endif
-
-
     byte  pos = 0;
     //флаг на случай, если пришли одни нули от ESP
     bool noolFlag = true;
@@ -563,10 +609,6 @@ void loop()
     if (!noolFlag)
     {
       TEMP_OUT = tmp.f;
-      #ifdef DEBUG
-      softSerial.print(F("[loop. NRF data available] !noolFlag; TEMP_OUT: "));
-      softSerial.println(TEMP_OUT);
-      #endif
     }
 
     // получаем значение напряжения
@@ -582,16 +624,8 @@ void loop()
     if(!noolFlag)
     {  
       BAT = (double) lng.l / 1000.0 ; //mV -> V
-      
-      #ifdef DEBUG
-      softSerial.print(F("[loop. NRF data available] !noolFlag; BAT: "));
-      softSerial.println(BAT);
-      #endif
     }
 
-    #ifdef DEBUG
-    softSerial.println(F("[<- loop. NRF data available] "));
-    #endif
 }
 
  // считываем DHT
@@ -599,55 +633,17 @@ void loop()
  dhtCounter++;
  if (dhtCounter > DHT_COUNTER_TIMEOUT)
  {
-    #ifdef DEBUG
-    softSerial.print(F("[loop. dhtCounter > DHT_COUNTER_TIMEOUT] "));
-    softSerial.print(F("Memory Free: "));
-    softSerial.println(memoryFree());
-    #endif
-      
     dhtCounter = 0;
     ReadDHT();
     ReadBMP();
  }
 
-  if (espCounter > 0)
-  {
-    espCounter--;
-    // reset ESP
-    if (espCounter == 100)
-    {
-      digitalWrite(ESP_RESET_PIN, 0);
-
-      #ifdef DEBUG
-      softSerial.println(F("[loop. espCounter == 100] ESP_RESET_PIN set to 0"));
-      #endif
-    }
-
-    if (espCounter <= 0)
-    {
-      digitalWrite(ESP_RESET_PIN, 1);
-
-      #ifdef DEBUG
-      softSerial.println(F("[loop. espCounter == 0] ESP_RESET_PIN set to 1"));
-      #endif
-    }
-  }
-
+ 
   sendCounter++;
   if (sendCounter > SEND_COUNTER_TIMEOUT)
   {
-    #ifdef DEBUG
-    softSerial.println(F("[loop. sendCounter > SEND_COUNTER_TIMEOUT] sendCounter set to 0"));
-    #endif
-      
     sendCounter = 0;
     SendDataToESP();
-    espCounter = ESP_REQUEST_TIMEOUT;
-
-    #ifdef DEBUG
-    softSerial.print(F("[loop. sendCounter > SEND_COUNTER_TIMEOUT] espCounter set to "));
-    softSerial.println(espCounter);
-    #endif
   }
   
   delay(10);   
