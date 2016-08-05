@@ -22,8 +22,10 @@
 
 
 // таймауты *10 (мс.)
+// период опроса DHT и BMP
 #define DHT_COUNTER_TIMEOUT 6000
-#define SEND_COUNTER_TIMEOUT 6000 // 60000
+// период отправки данных на thingspeak
+#define SEND_COUNTER_TIMEOUT 60000 // 60000
 // период проверки статуса WiFi у ESP-LINK (* 10 мс)
 #define WIFI_CHECK_TIMEOUT 1000
    
@@ -38,7 +40,7 @@ MQTT mqtt(&esp);
 
 REST rest(&esp);
 
-String tsApiKey = "S2CRYTCZOHDR9FQG";
+const char* tsApiKey = "SBS8SASVY5E921Z6";
 const char* tsServer = "api.thingspeak.com";
 
 dht DHT;
@@ -128,9 +130,8 @@ void wifiCb(void* response)
 	if (res.getArgc() == 1) 
 	{
 		res.popArgs((uint8_t*)&status, 4);
-		if (status == STATION_GOT_IP) {
-			//debugPort.println("WIFI CONNECTED");
-			//  mqtt.connect("192.168.100.3", 1883, false);
+		if (status == STATION_GOT_IP) 
+		{	
 			wifiIsConnected = true;
 			mqtt.connect(MQTT_BROKER_HOST, 1883); /*without security ssl*/
 			stsLed = 1;
@@ -149,20 +150,10 @@ void wifiCb(void* response)
 void mqttConnected(void* response)
 {
 	mqtt_connected = true;
-	//debugPort.println("MQTT CONNECTED");
-	
-	// mqtt.subscribe(TOPIC_HUMIDITY_HH);
-	// mqtt.subscribe(TOPIC_HUMIDITY_LL);
-	// mqtt.subscribe(TOPIC_CONTROL_MODE);
-	// mqtt.subscribe(TOPIC_FAN);
-	// mqtt.subscribe(TOPIC_LIGHT);
-
-	//PublishAllData();
 }
 void mqttDisconnected(void* response)
 {
 	mqtt_connected = false;
-	//debugPort.println("MQTT DISCONNECTED");
 }
 
 // Callback when an MQTT message arrives for one of our subscriptions
@@ -244,35 +235,8 @@ void mqttData(void* response)
 
 void mqttPublished(void* response)
 {
-	//debugPort.print("MQTT PUBLISHED");
-}
-
-// Передача всех данных по MQTT
-//void PublishAllData()
-//{
-//	if ((!mqttConnected) | (!wifiIsConnected)) return;
-//
-//	 char buf[10];
-
-	//itoa(HU, buf, 10);
-	//mqtt.publish(TOPIC_HUMIDITY, buf, 0, 1);
-	// itoa(TE, buf, 10);
-	// mqtt.publish(TOPIC_TEMPERATURE, buf, 0, 1);
-	// itoa(LL, buf, 10);
-	// mqtt.publish(TOPIC_HUMIDITY_LL, buf, 0, 1);
-	// itoa(HH, buf, 10);
-	// mqtt.publish(TOPIC_HUMIDITY_HH, buf, 0, 1);
-	// itoa(LI, buf, 10);
-	// mqtt.publish(TOPIC_LIGHT, buf, 0, 1);
-	// itoa(CM, buf, 10);
-	// mqtt.publish(TOPIC_CONTROL_MODE, buf, 0, 1);
-	// itoa(FO, buf, 10);
-	// mqtt.publish(TOPIC_FAN, buf, 0, 1);
 	
-	// char buf1[20];
-	// strcpy_P(buf1, (char*)pgm_read_word(&(dht_sts[DH])));
-	// mqtt.publish(TOPIC_HUMIDITY_SENSOR_STATUS, buf1, 0, 1);
-//}
+}
 
 // Передача одного параметра по MQTT PublishOneData(const char * mqtt_topic_name)
 void PublishOneData(const char* mqtt_topic_name)
@@ -283,15 +247,10 @@ void PublishOneData(const char* mqtt_topic_name)
 	char val[20] = "";
 
 	 String topicName = String(mqtt_topic_name);
-	// Serial.print("topic: ");
-	// Serial.println(topicName);
 	 
 	 if (topicName.compareTo(TOPIC_HUMIDITY) == 0)
 	 {
-		// Serial.println("TOPIC_HUMIDITY");
 		 dtostrf(HUM, 1, 1, val);
-		// Serial.print("Hum: ");
-		// Serial.println(val);
 		 mqtt.publish(mqtt_topic_name, val, 0, 1);
 		 
 	 }
@@ -329,13 +288,7 @@ void PublishOneData(const char* mqtt_topic_name)
 
 void ReadDHT()
 {
-	//Serial.println("ReadDHT()");
-	// DEBUG !!!
-	cnt++;
-	HUM = (double) cnt;
-	PublishOneData(TOPIC_HUMIDITY);
-
-		// READ DATA
+	// READ DATA
 	byte newHUMSts = 0;
   	int chk = DHT.read11(DHT11_PIN);
   	switch (chk)
@@ -363,20 +316,22 @@ void ReadDHT()
 	  	break;
   	}
 
-	if (newHUMSts != HUMSts)
+	/*if (newHUMSts != HUMSts)
 	{
 		HUMSts = newHUMSts;
 		PublishOneData(TOPIC_DHT_STS);
-	}
+	}*/
 
   	if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 0) & (DHT.temperature < 90))
 	{
 		  HUM = DHT.humidity;
 		  TEMP_IN = DHT.temperature;
+		  HUMSts = newHUMSts;
 
 		  // Publish MQTT
 		  PublishOneData(TOPIC_HUMIDITY);		
 		  PublishOneData(TOPIC_TEMPERATURE_IN);	 
+		  PublishOneData(TOPIC_DHT_STS);
 	}
 }
 
@@ -405,26 +360,53 @@ void SendDataToESP()
 		return;
 	}
 
-	char response[266];
 	if (wifiIsConnected) 
 	{
 		
-			char buff[64];
-			char str_hum[20];
-			dtostrf(HUM, 1, 1, str_hum);
-			sprintf(buff, "/update?api_key=6EE0PANPMO4FELI6&field1=%s", str_hum);
+		// Создаем URI для запроса
+		char buff[150] = "";
+		char str[20] = "";
+		sprintf(str,"/update?api_key=");
+		strcat(buff, str);
+		sprintf(str, "%s", tsApiKey);
+		strcat(buff, str);
+		sprintf(str, "&field1=");
+		strcat(buff, str);
+		dtostrf(TEMP_OUT, 1, 1, str);
+		strcat(buff, str);
+		sprintf(str, "&field2=");
+		strcat(buff, str);
+		dtostrf(BAT, 1, 2, str);
+		strcat(buff, str);
+		sprintf(str, "&field3=");
+		strcat(buff, str);
+		dtostrf(TEMP_IN, 1, 1, str);
+		strcat(buff, str);
+		sprintf(str, "&field4=");
+		strcat(buff, str);
+		dtostrf(HUM, 1, 1, str);
+		strcat(buff, str);
+		sprintf(str, "&field5=");
+		strcat(buff, str);
+		dtostrf(PRESS, 1, 1, str);
+		strcat(buff, str);
+		sprintf(str, "&field6=");
+		strcat(buff, str);
+		dtostrf(TEMP_E, 1, 1, str);
+		strcat(buff, str);
 			
-			rest.get((const char*)buff);
-			
+		rest.get((const char*)buff);
+		
+		char response[266];
 
-			if (!rest.getResponse(response, 266) == HTTP_STATUS_OK) 
-			{
-				stsLed = 3;
-			} 
-			else
-			{
-				stsLed = 1;
-			}
+		if (!rest.getResponse(response, 266) == HTTP_STATUS_OK) 
+		{
+			stsLed = 3;
+		} 
+		else
+		{
+			stsLed = 1;
+		}
 	}
 
 }
@@ -457,6 +439,7 @@ void setup()
   //debugPort.println("ARDUINO: setup mqtt client");
   if (!mqtt.begin("Weater_Station", "", "", 120, 1))
   {
+	  stsLed = 0;
 	  return;
   }
 
@@ -490,50 +473,7 @@ void loop()
 		}
 	}
    
-      // отображаем статус на LED
-      // if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (NARODMON_STATUS))
-      // {
-        // stsLed = 1;
-
-        // #ifdef DEBUG
-        // softSerial.println(F("[loop. sw == true] stsLed set to 1"));
-        // #endif
-      // }
-       // else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (!NARODMON_STATUS))
-       // {
-          // stsLed = 2;
-
-          // #ifdef DEBUG
-          // softSerial.println(F("[loop. sw == true] stsLed set to 2"));
-          // #endif
-       // }
-       // else if (!WIFI_STATUS)
-       // {
-          // stsLed = 0;
-
-          // #ifdef DEBUG
-          // softSerial.println(F("[loop. sw == true] stsLed set to 0"));
-          // #endif
-       // }
-        // else if ((WIFI_STATUS) & (!THINGSPEAK_STATUS) & (NARODMON_STATUS))
-        // {
-           // stsLed = 3;
-
-           // #ifdef DEBUG
-           // softSerial.println(F("[loop. sw == true] stsLed set to 3"));
-           // #endif
-        // }
-        // else if ((WIFI_STATUS) & (THINGSPEAK_STATUS) & (!NARODMON_STATUS))
-        // {
-           // stsLed = 4;
-
-           // #ifdef DEBUG
-           // softSerial.println(F("[loop. sw == true] stsLed set to 4"));
-           // #endif
-        // }
-
  
-  
   // Update StatusLed
   switch(stsLed)
   {
@@ -659,9 +599,7 @@ void loop()
  {
     dhtCounter = 0;
     ReadDHT();
-  //  ReadBMP();
-
-
+    ReadBMP();
  }
 
  
