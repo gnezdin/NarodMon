@@ -10,9 +10,9 @@
 #include <nRF24L01.h>
 #include <RF24.h> // https://github.com/maniacbug/RF24
  
-#include <DHT.h>
-#include <BMP085.h>
+#include <dht.h>
 #include <Wire.h>
+#include <Adafruit_BMP085.h>
 #include <espduino.h>
 #include <mqtt.h>
 #include <rest.h>
@@ -29,7 +29,7 @@
 // период проверки статуса WiFi у ESP-LINK (* 10 мс)
 #define WIFI_CHECK_TIMEOUT 1000
    
-#define DHT11_PIN 6
+#define DHT21_PIN 8
 
 // Initialize a connection to esp-link using the normal hardware serial port both for
 // SLIP and for debug messages.
@@ -44,7 +44,7 @@ const char* tsApiKey = "SBS8SASVY5E921Z6";
 const char* tsServer = "api.thingspeak.com";
 
 dht DHT;
-BMP085 bmp = BMP085();  
+Adafruit_BMP085 bmp;
 
 const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор передачи, "труба"
 
@@ -67,7 +67,7 @@ double TEMP_E = 0;
 byte HUMSts = 6;
 
 //DEBUG!!!
-int cnt = 0;
+//int cnt = 0;
 
 // переменная для светодиода 0-выкл, 1-вкл, 2-мигание, 3 - одна вспышка, 4 - две вспышки
 int  stsLed = 0;
@@ -86,6 +86,8 @@ bool mqtt_connected = false;
 int tsSendCounter = 0;
 // счётчик проверки статуса WiFi у ESP-LINK
 int wifiCheckCounter = 0;
+// флаг успешности инициализации BMP085
+bool bmp_ready = false;
 
 // WiFi AP Data
 const char* WIFI_SSID = "WdLink";
@@ -276,7 +278,7 @@ void PublishOneData(const char* mqtt_topic_name)
 	 }
 	 else if (topicName.compareTo(TOPIC_RADIO_BAT) == 0)
 	 {
-		 dtostrf(BAT, 1, 1, val);
+		 dtostrf(BAT, 1, 2, val);
 		 mqtt.publish(mqtt_topic_name, val, 0, 1);
 	 }
 	 else if (topicName.compareTo(TOPIC_DHT_STS) == 0)
@@ -288,9 +290,11 @@ void PublishOneData(const char* mqtt_topic_name)
 
 void ReadDHT()
 {
+	// Debug !!
+	//Serial.println("ReadDHT()");
 	// READ DATA
 	byte newHUMSts = 0;
-  	int chk = DHT.read11(DHT11_PIN);
+  	int chk = DHT.read21(DHT21_PIN);
   	switch (chk)
   	{
 	  	case DHTLIB_OK:
@@ -316,17 +320,23 @@ void ReadDHT()
 	  	break;
   	}
 
-	/*if (newHUMSts != HUMSts)
-	{
-		HUMSts = newHUMSts;
-		PublishOneData(TOPIC_DHT_STS);
-	}*/
+	// debug !!
+	//Serial.print("chk: ");
+	//Serial.println(chk);
+
 
   	if ((chk == DHTLIB_OK) & (DHT.humidity > 0) & (DHT.humidity <= 100) & (DHT.temperature > 0) & (DHT.temperature < 90))
 	{
 		  HUM = DHT.humidity;
 		  TEMP_IN = DHT.temperature;
 		  HUMSts = newHUMSts;
+
+		  // debug !!
+		  //Serial.print("HUM: ");
+		  //Serial.println(HUM);
+		  // debug !!
+		  //Serial.print("TEMP_IN: ");
+		  //Serial.println(TEMP_IN);
 
 		  // Publish MQTT
 		  PublishOneData(TOPIC_HUMIDITY);		
@@ -337,34 +347,36 @@ void ReadDHT()
 
 void ReadBMP()
 {
-	//Serial.println("ReadBMP()");
-  long pres = 0; //bmp.readPressure();
-  bmp.getPressure(&pres);
-  long temp = 0;
-  bmp.getTemperature(&temp);
+	if (!bmp_ready) return;
+	
+	long pres = bmp.readPressure();
+	float tmp = bmp.readTemperature();
 
-  float tmp = temp;
+	PRESS = (double) pres / 1000.0;
+	TEMP_E = tmp;
 
-  PRESS = (double) pres / 1000.0;
-  TEMP_E = tmp * 0.1;
-
-  PublishOneData(TOPIC_PRESSURE);
-  PublishOneData(TOPIC_TEMPERATURE_E);
+	PublishOneData(TOPIC_PRESSURE);
+	PublishOneData(TOPIC_TEMPERATURE_E);
 }
 
-void SendDataToESP()
+void SendDataToTS()
 {
+	// Debug !!
+	//Serial.println("SendDataToESP()");
+
 	if (!rest.begin(tsServer))
 	{
+		//Serial.println("!rest.begin()");
 		stsLed = 2;
 		return;
 	}
 
 	if (wifiIsConnected) 
 	{
-		
+		//Serial.println("wifiIsConnected: True");
+
 		// Создаем URI для запроса
-		char buff[150] = "";
+		char buff[266] = "";
 		char str[20] = "";
 		sprintf(str,"/update?api_key=");
 		strcat(buff, str);
@@ -395,17 +407,24 @@ void SendDataToESP()
 		dtostrf(TEMP_E, 1, 1, str);
 		strcat(buff, str);
 			
-		rest.get((const char*)buff);
-		
-		char response[266];
+		//Serial.println("get string:");
+		//Serial.println(buff);
 
-		if (!rest.getResponse(response, 266) == HTTP_STATUS_OK) 
+		rest.get(buff);
+		
+		//char response[266];
+
+		if (!rest.getResponse(buff, 266) == HTTP_STATUS_OK) 
 		{
-			stsLed = 3;
+			//Serial.println("Response OK: ");
+			//Serial.println(buff);
+			//stsLed = 3;
 		} 
 		else
 		{
-			stsLed = 1;
+			//Serial.println("Response: ");
+			//Serial.println(buff);
+			//stsLed = 1;
 		}
 	}
 
@@ -418,6 +437,10 @@ void setup()
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
   digitalWrite(STS_LED_PIN, 0);
+
+  // BMP init
+  if (bmp.begin()) bmp_ready = true;
+  else bmp_ready = false;
 
   // NRF init
   radio.begin();
@@ -453,7 +476,6 @@ void setup()
   /*setup wifi*/
   //debugPort.println("ARDUINO: setup wifi");
   esp.wifiCb.attach(&wifiCb);
-
   esp.wifiConnect(WIFI_SSID, WIFI_PASSWORD);
 }
 
@@ -607,7 +629,7 @@ void loop()
   if (sendCounter > SEND_COUNTER_TIMEOUT)
   {
     sendCounter = 0;
-    SendDataToESP();
+    SendDataToTS();
   }
   
   delay(10);   
