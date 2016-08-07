@@ -23,7 +23,7 @@
 
 // таймауты *10 (мс.)
 // период опроса DHT и BMP
-#define DHT_COUNTER_TIMEOUT 6000
+#define DHT_COUNTER_TIMEOUT 60000
 // период отправки данных на thingspeak
 #define SEND_COUNTER_TIMEOUT 60000 // 60000
 // период проверки статуса WiFi у ESP-LINK (* 10 мс)
@@ -73,7 +73,7 @@ byte HUMSts = 6;
 int  stsLed = 0;
 int stsLedCounter = 0;
 
-// счётчик для чтения данных DHT и BMP (1 раз в минуту)
+// счётчик для чтения данных DHT и BMP (1 раз в 10 мин)
 long dhtCounter = 0;
 // счётчик отправки на thingspeak и по  (1 раз в 10 мин)
 long sendCounter = 0;
