@@ -24,7 +24,7 @@
 
 // таймауты *10 (мс.)
 // период опроса DHT и BMP
-#define DHT_COUNTER_TIMEOUT 60000
+#define DHT_COUNTER_TIMEOUT 6000
 // период отправки данных на thingspeak
 #define SEND_COUNTER_TIMEOUT 60000 // 60000
 // период проверки статуса WiFi у ESP-LINK (* 10 мс)
@@ -32,15 +32,7 @@
    
 #define DHT21_PIN 8
 
-// Initialize a connection to esp-link using the normal hardware serial port both for
-// SLIP and for debug messages.
-ELClient esp(&Serial);
-// Initialize CMD client (for GetTime)
-ELClientCmd cmd(&esp);
-// Initialize the MQTT client
-ELClientMqtt mqtt(&esp);
-// Initialize a REST client on the connection to esp-link
-ELClientRest rest(&esp);
+
 
 const char* tsApiKey = "SBS8SASVY5E921Z6";
 const char* tsServer = "api.thingspeak.com";
@@ -51,6 +43,16 @@ Adafruit_BMP085 bmp;
 const uint64_t pipe = 0xF1F9F8F3AALL; // индитификатор передачи, "труба"
 
 RF24 radio(9, 10); // CE, CSN
+
+// Initialize a connection to esp-link using the normal hardware serial port both for
+// SLIP and for debug messages.
+ELClient esp(&Serial);
+// Initialize CMD client (for GetTime)
+ELClientCmd cmd(&esp);
+// Initialize the MQTT client
+ELClientMqtt mqtt(&esp);
+// Initialize a REST client on the connection to esp-link
+ELClientRest rest(&esp);
 
 // Температура окр. воздуха 
 double TEMP_OUT = 0;
@@ -138,13 +140,13 @@ void wifiCb(void* response)
 		{
 			wifiIsConnected = true;
 			stsLed = 1;
-			//Serial.println(F("WIFI CONNECTED"));
+			//Serial.println("WIFI CONNECTED");
 		}
 		else
 		{
 			wifiIsConnected = false;
 			stsLed = 0;
-			//Serial.print(F("WIFI NOT READY: "));
+		//	Serial.print("WIFI NOT READY: ");
 			//Serial.println(status);
 		}
 	}
@@ -154,6 +156,7 @@ void wifiCb(void* response)
 void mqttConnected(void* response)
 {
 	mqtt_connected = true;
+	//Serial.println("MQTT CONNECTED");
 }
 void mqttDisconnected(void* response)
 {
@@ -240,7 +243,7 @@ void mqttData(void* response)
 
 void mqttPublished(void* response)
 {
-//	
+
 }
 
 // Передача одного параметра по MQTT PublishOneData(const char * mqtt_topic_name)
@@ -440,19 +443,32 @@ void SendDataToTS()
 
 void setup() 
 {
-  Serial.begin(57600);
-  
   stsLed = 0;
   pinMode(STS_LED_PIN, OUTPUT);
-  digitalWrite(STS_LED_PIN, 0);
+  digitalWrite(STS_LED_PIN, 1);
 
+  Serial.begin(57600);
+  Serial.println("Setup");
+  
   // BMP init
-  if (bmp.begin()) bmp_ready = true;
-  else bmp_ready = false;
+  if (bmp.begin())
+  {
+	  bmp_ready = true;
+	  
+  }
+  else
+  {
+	  bmp_ready = false;
+    digitalWrite(STS_LED_PIN, 0);
+	  
+  }
 
+  Serial.print("Bmp Ready: ");
+  Serial.println(bmp_ready);
+ 
   // NRF init
   radio.begin();
-  delay(2);
+  delay(20);
   radio.setChannel(109); // канал (0-127)
   radio.setDataRate(RF24_1MBPS);
   radio.setPALevel(RF24_PA_HIGH);
@@ -464,20 +480,25 @@ void setup()
 // Sync-up with esp-link, this is required at the start of any sketch and initializes the
 // callbacks to the wifi status change callback. The callback gets called with the initial
 // status right after Sync() below completes.
-  esp.wifiCb.attach(wifiCb); // wifi status change callback, optional (delete if not desired)
+  esp.wifiCb.attach(wifiCb);  // wifi status change callback, optional (delete if not desired)
   bool ok;
   do
   {
+     //digitalWrite(STS_LED_PIN, 0);
 	  ok = esp.Sync();      // sync up with esp-link, blocks for up to 2 seconds
-							// if (!ok) Serial.println(F("EL-Client sync failed!"));
+	  delay(100);					// if (!ok) Serial.println(F("EL-Client sync failed!"));
   } while (!ok);
 
+  //Serial.println("ESP Sync ok");
+  digitalWrite(STS_LED_PIN, 1);
+  stsLed = 1;
   // Set-up callbacks for events and initialize with es-link.
-  mqtt.connectedCb.attach(mqttConnected);
+ /* mqtt.connectedCb.attach(mqttConnected);
   mqtt.disconnectedCb.attach(mqttDisconnected);
   mqtt.publishedCb.attach(mqttPublished);
   mqtt.dataCb.attach(mqttData);
-  mqtt.setup();
+  mqtt.setup();*/
+  Serial.println("Setup END");
 }
 
 void loop() 
@@ -561,59 +582,59 @@ void loop()
   }
 
   // Считываем NRF
-  if (radio.available())
-  {        
-    byte data[8];
-    union
-    {
-      float f;
-      unsigned char buf[4];
-    }tmp;
-
-    union
-    {
-      long l;
-      unsigned char lBuf[4];
-    } lng;
-    
-    // читаем данные и указываем сколько байт читать
-    bool done = radio.read(&data, sizeof(data));
-
-    byte  pos = 0;
-    //флаг на случай, если пришли одни нули от ESP
-    bool noolFlag = true;
-
-    for (byte i = 0; i < 4; i++)
-    {
-      tmp.buf[i] = data[pos]; 
-      if (tmp.buf[i] != 0) noolFlag = false;
-      pos++;
-    }
-
-    if (!noolFlag)
-    {
-      TEMP_OUT = tmp.f;
-    }
-
-    // получаем значение напряжения
-    pos = 4;
-    noolFlag = true;
-    for (byte i = 0; i < 4; i++)
-    {
-      lng.lBuf[i] = data[pos];
-      if (lng.lBuf[i] != 0) noolFlag = false; 
-      pos++;
-    }
-
-    if(!noolFlag)
-    {  
-      BAT = (double) lng.l / 1000.0 ; //mV -> V
-    }
-
-	PublishOneData(TOPIC_TEMPERATURE_OUT);
-	PublishOneData(TOPIC_RADIO_BAT);
-
-}
+//  if (radio.available())
+//  {        
+//    byte data[8];
+//    union
+//    {
+//      float f;
+//      unsigned char buf[4];
+//    }tmp;
+//
+//    union
+//    {
+//      long l;
+//      unsigned char lBuf[4];
+//    } lng;
+//    
+//    // читаем данные и указываем сколько байт читать
+//    bool done = radio.read(&data, sizeof(data));
+//
+//    byte  pos = 0;
+//    //флаг на случай, если пришли одни нули от ESP
+//    bool noolFlag = true;
+//
+//    for (byte i = 0; i < 4; i++)
+//    {
+//      tmp.buf[i] = data[pos]; 
+//      if (tmp.buf[i] != 0) noolFlag = false;
+//      pos++;
+//    }
+//
+//    if (!noolFlag)
+//    {
+//      TEMP_OUT = tmp.f;
+//    }
+//
+//    // получаем значение напряжения
+//    pos = 4;
+//    noolFlag = true;
+//    for (byte i = 0; i < 4; i++)
+//    {
+//      lng.lBuf[i] = data[pos];
+//      if (lng.lBuf[i] != 0) noolFlag = false; 
+//      pos++;
+//    }
+//
+//    if(!noolFlag)
+//    {  
+//      BAT = (double) lng.l / 1000.0 ; //mV -> V
+//    }
+//
+//	PublishOneData(TOPIC_TEMPERATURE_OUT);
+//	PublishOneData(TOPIC_RADIO_BAT);
+//
+//}
 
  // считываем DHT
  // чтение датчиков
@@ -621,17 +642,18 @@ void loop()
  if (dhtCounter > DHT_COUNTER_TIMEOUT)
  {
     dhtCounter = 0;
-    ReadDHT();
-    ReadBMP();
+	Serial.println("DHT Timeout");
+    //ReadDHT();
+    //ReadBMP();
  }
 
- 
-  sendCounter++;
-  if (sendCounter > SEND_COUNTER_TIMEOUT)
-  {
-    sendCounter = 0;
-    SendDataToTS();
-  }
+ //
+ // sendCounter++;
+ // if (sendCounter > SEND_COUNTER_TIMEOUT)
+ // {
+ //   sendCounter = 0;
+ //   SendDataToTS();
+ // }
   
   delay(10);   
 }
