@@ -1,5 +1,5 @@
-// Код для передатчика ProMini Narodmon, ThingSpeak v.2.0
-//
+// Код для передатчика ProMini Narodmon, ThingSpeak v.2.1
+// Передача данных на ThingSpeak отключена.
 // Контроллер ProMini подключен к ESP8266 с прошивкой esp-link v. 2.1 b2
 // Передача всех параметров и удалённое управление реализовано через MQTT посредством esp-link
 //
@@ -40,8 +40,8 @@ MQTT mqtt(&esp);
 
 REST rest(&esp);
 
-const char* tsApiKey = "SBS8SASVY5E921Z6";
-const char* tsServer = "api.thingspeak.com";
+//const char* tsApiKey = "SBS8SASVY5E921Z6";
+//const char* tsServer = "api.thingspeak.com";
 
 dht DHT;
 Adafruit_BMP085 bmp;
@@ -76,14 +76,14 @@ int stsLedCounter = 0;
 // счётчик для чтения данных DHT и BMP (1 раз в 10 мин)
 long dhtCounter = 0;
 // счётчик отправки на thingspeak и по  (1 раз в 10 мин)
-long sendCounter = 0;
+//long sendCounter = 0;
 
 // статус Wi-Fi подключения
 bool wifiIsConnected = false;
 // MQTT status
 bool mqtt_connected = false;
 // ThingSpeak timer
-int tsSendCounter = 0;
+//int tsSendCounter = 0;
 // счётчик проверки статуса WiFi у ESP-LINK
 int wifiCheckCounter = 0;
 // флаг успешности инициализации BMP085
@@ -359,76 +359,76 @@ void ReadBMP()
 	PublishOneData(TOPIC_TEMPERATURE_E);
 }
 
-void SendDataToTS()
-{
-	// Debug !!
-	//Serial.println("SendDataToESP()");
-
-	if (!rest.begin(tsServer))
-	{
-		//Serial.println("!rest.begin()");
-		stsLed = 2;
-		return;
-	}
-
-	if (wifiIsConnected) 
-	{
-		//Serial.println("wifiIsConnected: True");
-
-		// Создаем URI для запроса
-		char buff[266] = "";
-		char str[20] = "";
-		sprintf(str,"/update?api_key=");
-		strcat(buff, str);
-		sprintf(str, "%s", tsApiKey);
-		strcat(buff, str);
-		sprintf(str, "&field1=");
-		strcat(buff, str);
-		dtostrf(TEMP_OUT, 1, 1, str);
-		strcat(buff, str);
-		sprintf(str, "&field2=");
-		strcat(buff, str);
-		dtostrf(BAT, 1, 2, str);
-		strcat(buff, str);
-		sprintf(str, "&field3=");
-		strcat(buff, str);
-		dtostrf(TEMP_IN, 1, 1, str);
-		strcat(buff, str);
-		sprintf(str, "&field4=");
-		strcat(buff, str);
-		dtostrf(HUM, 1, 1, str);
-		strcat(buff, str);
-		sprintf(str, "&field5=");
-		strcat(buff, str);
-		dtostrf(PRESS, 1, 1, str);
-		strcat(buff, str);
-		sprintf(str, "&field6=");
-		strcat(buff, str);
-		dtostrf(TEMP_E, 1, 1, str);
-		strcat(buff, str);
-			
-		//Serial.println("get string:");
-		//Serial.println(buff);
-
-		rest.get(buff);
-		
-		//char response[266];
-
-		if (!rest.getResponse(buff, 266) == HTTP_STATUS_OK) 
-		{
-			//Serial.println("Response OK: ");
-			//Serial.println(buff);
-			//stsLed = 3;
-		} 
-		else
-		{
-			//Serial.println("Response: ");
-			//Serial.println(buff);
-			//stsLed = 1;
-		}
-	}
-
-}
+//void SendDataToTS()
+//{
+//	// Debug !!
+//	//Serial.println("SendDataToESP()");
+//
+//	if (!rest.begin(tsServer))
+//	{
+//		//Serial.println("!rest.begin()");
+//		stsLed = 2;
+//		return;
+//	}
+//
+//	if (wifiIsConnected) 
+//	{
+//		//Serial.println("wifiIsConnected: True");
+//
+//		// Создаем URI для запроса
+//		char buff[266] = "";
+//		char str[20] = "";
+//		sprintf(str,"/update?api_key=");
+//		strcat(buff, str);
+//		sprintf(str, "%s", tsApiKey);
+//		strcat(buff, str);
+//		sprintf(str, "&field1=");
+//		strcat(buff, str);
+//		dtostrf(TEMP_OUT, 1, 1, str);
+//		strcat(buff, str);
+//		sprintf(str, "&field2=");
+//		strcat(buff, str);
+//		dtostrf(BAT, 1, 2, str);
+//		strcat(buff, str);
+//		sprintf(str, "&field3=");
+//		strcat(buff, str);
+//		dtostrf(TEMP_IN, 1, 1, str);
+//		strcat(buff, str);
+//		sprintf(str, "&field4=");
+//		strcat(buff, str);
+//		dtostrf(HUM, 1, 1, str);
+//		strcat(buff, str);
+//		sprintf(str, "&field5=");
+//		strcat(buff, str);
+//		dtostrf(PRESS, 1, 1, str);
+//		strcat(buff, str);
+//		sprintf(str, "&field6=");
+//		strcat(buff, str);
+//		dtostrf(TEMP_E, 1, 1, str);
+//		strcat(buff, str);
+//			
+//		//Serial.println("get string:");
+//		//Serial.println(buff);
+//
+//		rest.get(buff);
+//		
+//		//char response[266];
+//
+//		if (!rest.getResponse(buff, 266) == HTTP_STATUS_OK) 
+//		{
+//			//Serial.println("Response OK: ");
+//			//Serial.println(buff);
+//			//stsLed = 3;
+//		} 
+//		else
+//		{
+//			//Serial.println("Response: ");
+//			//Serial.println(buff);
+//			//stsLed = 1;
+//		}
+//	}
+//
+//}
 
 void setup() 
 {
@@ -625,12 +625,12 @@ void loop()
  }
 
  
-  sendCounter++;
+ /* sendCounter++;
   if (sendCounter > SEND_COUNTER_TIMEOUT)
   {
     sendCounter = 0;
     SendDataToTS();
-  }
+  }*/
   
   delay(10);   
 }
