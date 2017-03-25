@@ -33,12 +33,12 @@
 
 // Initialize a connection to esp-link using the normal hardware serial port both for
 // SLIP and for debug messages.
-ESP esp(&Serial, 5);
+ESP esp(&Serial, &Serial);
 
 // Initialize the MQTT client
 MQTT mqtt(&esp);
 
-REST rest(&esp);
+//REST rest(&esp);
 
 //const char* tsApiKey = "SBS8SASVY5E921Z6";
 //const char* tsServer = "api.thingspeak.com";
@@ -253,38 +253,38 @@ void PublishOneData(const char* mqtt_topic_name)
 	 if (topicName.compareTo(TOPIC_HUMIDITY) == 0)
 	 {
 		 dtostrf(HUM, 1, 1, val);
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 		 
 	 }
 	 else if (topicName.compareTo(TOPIC_TEMPERATURE_OUT) == 0)
 	 {
 		 dtostrf(TEMP_OUT, 1, 1, val);
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 	 }
 	 else if (topicName.compareTo(TOPIC_TEMPERATURE_IN) == 0)
 	 {
 		 dtostrf(TEMP_IN, 1, 1, val);
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 	 }
 	 else if (topicName.compareTo(TOPIC_TEMPERATURE_E) == 0)
 	 {
 		 dtostrf(TEMP_E, 1, 1, val);
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 	 }
 	 else if (topicName.compareTo(TOPIC_PRESSURE) == 0)
 	 {
 		 dtostrf(PRESS, 1, 1, val);
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 	 }
 	 else if (topicName.compareTo(TOPIC_RADIO_BAT) == 0)
 	 {
 		 dtostrf(BAT, 1, 2, val);
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 	 }
 	 else if (topicName.compareTo(TOPIC_DHT_STS) == 0)
 	 {
 		 strcpy_P(val, (char*)pgm_read_word(&(dht_sts[HUMSts])));
-		 mqtt.publish(mqtt_topic_name, val, 0, 1);
+		 mqtt.publish(mqtt_topic_name, val);
 	 }
 }
 
@@ -561,7 +561,8 @@ void loop()
 
   // Считываем NRF
   if (radio.available())
-  {        
+  {       
+	  //Serial.println("Data.Available");
     byte data[8];
     union
     {
@@ -578,6 +579,13 @@ void loop()
     // читаем данные и указываем сколько байт читать
     bool done = radio.read(&data, sizeof(data));
 
+	/*Serial.print("Data: ");
+	for (int i = 0; i < 8; i++)
+	{
+		Serial.print(data[i], HEX);
+		Serial.print(" ");
+	}*/
+
     byte  pos = 0;
     //флаг на случай, если пришли одни нули от ESP
     bool noolFlag = true;
@@ -589,10 +597,15 @@ void loop()
       pos++;
     }
 
-    if (!noolFlag)
-    {
+	//Serial.print("Temp: ");
+	//Serial.println(tmp.f);
+
+   // if (!noolFlag)
+   // {
       TEMP_OUT = tmp.f;
-    }
+   // }
+	//else
+		//Serial.println("TEMP_OUT Null flag");
 
     // получаем значение напряжения
     pos = 4;
@@ -603,11 +616,16 @@ void loop()
       if (lng.lBuf[i] != 0) noolFlag = false; 
       pos++;
     }
+	
+	//Serial.print("Bat: ");
+	//Serial.println(lng.l);
 
-    if(!noolFlag)
-    {  
+    //if(!noolFlag)
+    //{  
       BAT = (double) lng.l / 1000.0 ; //mV -> V
-    }
+   // }
+	//else
+		//Serial.println("BAT Null flag");
 
 	PublishOneData(TOPIC_TEMPERATURE_OUT);
 	PublishOneData(TOPIC_RADIO_BAT);
