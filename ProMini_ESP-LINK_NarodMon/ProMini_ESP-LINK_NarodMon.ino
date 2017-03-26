@@ -600,10 +600,10 @@ void loop()
 	//Serial.print("Temp: ");
 	//Serial.println(tmp.f);
 
-   // if (!noolFlag)
-   // {
+    if (!noolFlag)
+    {
       TEMP_OUT = tmp.f;
-   // }
+    }
 	//else
 		//Serial.println("TEMP_OUT Null flag");
 
@@ -620,10 +620,10 @@ void loop()
 	//Serial.print("Bat: ");
 	//Serial.println(lng.l);
 
-    //if(!noolFlag)
-    //{  
+    if(!noolFlag)
+    {  
       BAT = (double) lng.l / 1000.0 ; //mV -> V
-   // }
+    }
 	//else
 		//Serial.println("BAT Null flag");
 
